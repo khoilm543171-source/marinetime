@@ -13,6 +13,7 @@ from marinetime.pilot.preflight import (
     LocalStackReport,
     _executable_capability,
     _python_module_capability,
+    _python_runtime_capability,
     check_local_stack,
 )
 
@@ -40,6 +41,17 @@ class PilotPreflightTests(unittest.TestCase):
         self.assertTrue(report.raw_video_ready)
         self.assertEqual(report.missing_required, ())
 
+    def test_python_311_is_supported_for_ml_pilot(self) -> None:
+        result = _python_runtime_capability((3, 11, 9))
+        self.assertTrue(result.available)
+        self.assertIn("recommended=3.11", result.detail or "")
+
+    def test_python_314_is_blocked_for_ml_pilot(self) -> None:
+        result = _python_runtime_capability((3, 14, 0))
+        self.assertFalse(result.available)
+        self.assertEqual(result.name, "python_ml_runtime")
+        self.assertTrue(result.required_for_raw_video)
+
     @patch("marinetime.pilot.preflight.shutil.which", return_value=None)
     def test_missing_executable_is_reported_without_running_command(self, mocked_which) -> None:
         result = _executable_capability("ffmpeg", ["-version"], required=True)
@@ -53,9 +65,11 @@ class PilotPreflightTests(unittest.TestCase):
         self.assertTrue(result.available)
         mocked.assert_called_once_with("whisperx")
 
+    @patch("marinetime.pilot.preflight._python_runtime_capability")
     @patch("marinetime.pilot.preflight._python_module_capability")
     @patch("marinetime.pilot.preflight._executable_capability")
-    def test_gpu_probe_requests_useful_device_details(self, executable, module) -> None:
+    def test_gpu_probe_requests_useful_device_details(self, executable, module, runtime) -> None:
+        runtime.return_value = Capability("python_ml_runtime", "python_runtime", True, True, "ok")
         executable.side_effect = lambda name, args, required: Capability(
             name, "executable", required, True, "ok"
         )
