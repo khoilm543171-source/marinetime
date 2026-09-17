@@ -223,18 +223,22 @@ def extract_alus(
     *,
     client: ClaudeClient,
     evidence_pack: dict[str, Any],
-    video_id: str,
     repo_root: str | Path = ".",
     usage_log_path: str | Path = "storage/logs/token_ledger.jsonl",
 ) -> ALUExtractionResult:
-    """Run the single expensive semantic pass for one validated EvidencePack."""
-    validate_evidence_pack(evidence_pack)
+    """Run one semantic pass, with budget accounting bound to source identity.
+
+    The per-video token key is derived only from the validated EvidencePack
+    ``source_id``. Callers cannot supply a different id to reset or fragment the
+    per-video budget ledger.
+    """
+    summary = validate_evidence_pack(evidence_pack)
     dynamic_input = json.dumps(evidence_pack, ensure_ascii=False, separators=(",", ":"))
     model_result = run_task(
         client=client,
         task="alu_extract",
         dynamic_input=dynamic_input,
-        video_id=video_id,
+        video_id=summary.source_id,
         repo_root=repo_root,
         usage_log_path=usage_log_path,
     )
