@@ -52,6 +52,15 @@ class PilotMediaTests(unittest.TestCase):
             with self.assertRaisesRegex(MediaToolError, "VIDEO_STREAM_MISSING"):
                 probe_video(source)
 
+    @patch("marinetime.pilot.media._run")
+    def test_probe_rejects_non_object_payload(self, mocked_run) -> None:
+        mocked_run.return_value = subprocess.CompletedProcess([], 0, "[]", "")
+        with tempfile.TemporaryDirectory() as temp_dir:
+            source = Path(temp_dir) / "clip.mp4"
+            source.write_bytes(b"fake")
+            with self.assertRaisesRegex(MediaToolError, "FFPROBE_PAYLOAD_INVALID"):
+                probe_video(source)
+
     def test_extract_refuses_to_overwrite_by_default(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             source = Path(temp_dir) / "clip.mp4"
@@ -80,6 +89,36 @@ class PilotMediaTests(unittest.TestCase):
             self.assertIn("-ar", command)
             self.assertIn("16000", command)
             self.assertIn("pcm_s16le", command)
+
+    @patch("marinetime.pilot.media._run")
+    def test_failed_extract_removes_new_partial_output(self, mocked_run) -> None:
+        def fake_run(command, *, timeout=60):
+            Path(command[-1]).write_bytes(b"partial")
+            raise MediaToolError("TOOL_FAILED:ffmpeg:test")
+
+        mocked_run.side_effect = fake_run
+        with tempfile.TemporaryDirectory() as temp_dir:
+            source = Path(temp_dir) / "clip.mp4"
+            output = Path(temp_dir) / "audio" / "clip.wav"
+            source.write_bytes(b"fake")
+            with self.assertRaisesRegex(MediaToolError, "TOOL_FAILED"):
+                extract_asr_wav(source, output)
+            self.assertFalse(output.exists())
+
+    @patch("marinetime.pilot.media._run")
+    def test_empty_audio_output_is_rejected_and_removed(self, mocked_run) -> None:
+        def fake_run(command, *, timeout=60):
+            Path(command[-1]).write_bytes(b"")
+            return subprocess.CompletedProcess(command, 0, "", "")
+
+        mocked_run.side_effect = fake_run
+        with tempfile.TemporaryDirectory() as temp_dir:
+            source = Path(temp_dir) / "clip.mp4"
+            output = Path(temp_dir) / "audio" / "clip.wav"
+            source.write_bytes(b"fake")
+            with self.assertRaisesRegex(MediaToolError, "AUDIO_OUTPUT_EMPTY"):
+                extract_asr_wav(source, output)
+            self.assertFalse(output.exists())
 
 
 if __name__ == "__main__":
