@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import os
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -11,6 +13,8 @@ from marinetime.pilot.local_preprocess import (
     LocalPreprocessError,
     SceneWindow,
     _coerce_paddle_payload,
+    _paddle_cpu_compat_kwargs,
+    _prepare_retry_output,
     _seconds_to_ms,
     build_local_evidence_pack,
     select_keyframe_timestamps,
@@ -57,6 +61,45 @@ class LocalPreprocessTests(unittest.TestCase):
     def test_paddle_payload_rejects_invalid_json_text(self) -> None:
         self.assertIsNone(_coerce_paddle_payload(_JsonResult("not-json")))
 
+    def test_paddle_cpu_compat_disables_pir_and_mkldnn(self) -> None:
+        previous = os.environ.get("FLAGS_enable_pir_api")
+        try:
+            os.environ["FLAGS_enable_pir_api"] = "1"
+            kwargs = _paddle_cpu_compat_kwargs()
+            self.assertEqual(os.environ["FLAGS_enable_pir_api"], "0")
+            self.assertEqual(kwargs, {"enable_mkldnn": False})
+        finally:
+            if previous is None:
+                os.environ.pop("FLAGS_enable_pir_api", None)
+            else:
+                os.environ["FLAGS_enable_pir_api"] = previous
+
+    def test_retry_cleanup_removes_only_known_partial_artifacts(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            frames = root / "frames"
+            frames.mkdir()
+            (root / "audio.wav").write_bytes(b"partial")
+            (root / "transcript_segments.json").write_text("[]", encoding="utf-8")
+            (frames / "frame_001.jpg").write_bytes(b"partial")
+            keep = root / "keep.txt"
+            keep.write_text("keep", encoding="utf-8")
+
+            returned = _prepare_retry_output(root)
+
+            self.assertEqual(returned, frames)
+            self.assertFalse((root / "audio.wav").exists())
+            self.assertFalse((root / "transcript_segments.json").exists())
+            self.assertFalse((frames / "frame_001.jpg").exists())
+            self.assertTrue(keep.exists())
+
+    def test_retry_cleanup_refuses_completed_pack(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            (root / "evidence_pack.json").write_text("{}", encoding="utf-8")
+            with self.assertRaisesRegex(LocalPreprocessError, "OUTPUT_ALREADY_COMPLETE"):
+                _prepare_retry_output(root)
+
     def test_builder_assigns_cross_modality_unique_ids_and_validates(self) -> None:
         pack = build_local_evidence_pack(
             source_id="VID-001",
@@ -70,7 +113,7 @@ class LocalPreprocessTests(unittest.TestCase):
         self.assertEqual(pack["transcript_segments"][0]["evidence_id"], "SEG-001")
         self.assertEqual(pack["frames"][0]["evidence_id"], "FRAME-001")
         self.assertEqual(pack["ocr_hits"][0]["evidence_id"], "OCR-001")
-        self.assertEqual(pack["preprocess_version"], "local_video_v1")
+        self.assertEqual(pack["preprocess_version"], "local_video_v1.1")
 
     def test_builder_does_not_correct_uncertain_ocr_text(self) -> None:
         uncertain = "8O bar"
