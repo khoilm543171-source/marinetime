@@ -3,7 +3,11 @@ budget:
   max_input_tokens_per_call: 20000
   max_output_tokens_per_call: 2500
   max_tokens_per_video: 50000
-  max_daily_tokens: 9000000
+
+  # User-approved daily allocation: close new scope at 5.5M and stop Marinetime
+  # provider calls at 7M, preserving the remaining provider quota for other work.
+  closeout_daily_tokens: 5500000
+  max_daily_tokens: 7000000
 
   # Optional cost guards when reliable cost data is available.
   max_cost_per_video_usd: 0.50
