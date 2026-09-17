@@ -13,13 +13,17 @@ class SafetyValidationTests(unittest.TestCase):
             "evidence_refs": ["SEG-01"],
             "support_level": "directly_supported",
             "provenance_class": "maker_manual",
-            "rendering_scope": "context_specific",
+            "rendering_scope": "authoritative_operational",
             "claim_scope": "minimal",
             "context_requirement": "minimal",
             "context": {},
             "safety": {"safety_critical": False, "numeric_claim": False},
             "verification_status": "verified",
         }
+
+    def test_verified_authoritative_maker_manual_can_be_operational(self):
+        d = validate_alu(self.base())
+        self.assertTrue(d.accepted_for_operational_use)
 
     def test_missing_evidence_blocks_education_and_operation(self):
         alu = self.base()
@@ -32,7 +36,6 @@ class SafetyValidationTests(unittest.TestCase):
     def test_creator_experience_cannot_be_authoritative_operational(self):
         alu = self.base()
         alu["provenance_class"] = "creator_experience"
-        alu["rendering_scope"] = "authoritative_operational"
         d = validate_alu(alu)
         self.assertFalse(d.accepted_for_operational_use)
         self.assertIn("PROVENANCE_SCOPE_VIOLATION", d.reasons)
@@ -53,6 +56,13 @@ class SafetyValidationTests(unittest.TestCase):
         self.assertTrue(d.accepted_for_education)
         self.assertFalse(d.accepted_for_operational_use)
         self.assertIn("SUPPORT_INSUFFICIENT_FOR_OPERATION", d.reasons)
+
+    def test_verified_context_specific_alu_is_still_not_operational(self):
+        alu = self.base()
+        alu["rendering_scope"] = "context_specific"
+        d = validate_alu(alu)
+        self.assertFalse(d.accepted_for_operational_use)
+        self.assertIn("RENDERING_SCOPE_NOT_OPERATIONAL", d.reasons)
 
     def test_unverified_alu_cannot_be_operational(self):
         alu = self.base()
