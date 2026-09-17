@@ -9,7 +9,10 @@ sys.path.insert(0, str(ROOT / "src"))
 from marinetime.config import ClaudeSettings  # noqa: E402
 from marinetime.llm.client import ClaudeAPIError, ClaudeClient  # noqa: E402
 from marinetime.llm.router import run_task  # noqa: E402
-from marinetime.llm.token_guard import TokenBudgetBlocked  # noqa: E402
+from marinetime.llm.token_guard import (  # noqa: E402
+    TokenBudgetBlocked,
+    get_token_budget_status,
+)
 from marinetime.llm.usage import load_usage_totals  # noqa: E402
 
 
@@ -38,6 +41,8 @@ def main() -> int:
         return 1
 
     totals = load_usage_totals(LEDGER, video_id=CHECK_VIDEO_ID)
+    status = get_token_budget_status(current_daily_tokens=totals.daily_tokens)
+
     print("TOKEN_ACCOUNTING_OK")
     print(f"model={result.model}")
     print(f"input_tokens={result.input_tokens}")
@@ -47,6 +52,9 @@ def main() -> int:
     print(f"request_guard_tokens={result.guard_tokens}")
     print(f"video_guard_tokens_today={totals.video_tokens}")
     print(f"daily_guard_tokens_today={totals.daily_tokens}")
+    print(f"daily_mode={status.mode.value}")
+    print(f"tokens_until_closeout={status.tokens_until_closeout}")
+    print(f"tokens_until_hard_stop={status.tokens_until_hard_stop}")
     print(f"ledger={LEDGER}")
     return 0
 

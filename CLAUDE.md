@@ -21,6 +21,8 @@ Marinetime is an evidence-first Marine Engineering learning system. The current 
 - Keep runtime prompts task-specific and versioned.
 - Do not create extra agents/frameworks unless a measured pilot failure requires them.
 - One automatic retry maximum.
+- Daily token mode is defined in `docs/TOKEN_BUDGET_POLICY.md`: below 5.5M = build; at/above 5.5M = freeze new scope and close the active PR; 7M = hard stop Marinetime provider calls.
+- Never raise or bypass the 7M Marinetime hard cap to finish a task.
 
 ## File loading policy
 - `RULES.md` is **not** an always-load file. Read it only when changing architecture, schemas, safety, retrieval permissions, provider routing, budgets, or learning-state logic.
