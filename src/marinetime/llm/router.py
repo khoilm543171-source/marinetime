@@ -23,6 +23,7 @@ class LLMTaskResult:
     output_tokens: int
     cache_creation_input_tokens: int = 0
     cache_read_input_tokens: int = 0
+    stop_reason: str | None = None
 
     @property
     def guard_tokens(self) -> int:
@@ -90,4 +91,5 @@ def run_task(
         output_tokens=response.usage.output_tokens,
         cache_creation_input_tokens=response.usage.cache_creation_input_tokens,
         cache_read_input_tokens=response.usage.cache_read_input_tokens,
+        stop_reason=response.stop_reason,
     )
