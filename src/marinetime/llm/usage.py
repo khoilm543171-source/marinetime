@@ -54,16 +54,28 @@ def append_usage(
         handle.write(json.dumps(payload, ensure_ascii=False) + "\n")
 
 
+def _nonnegative_int(payload: dict, field: str) -> int | None:
+    try:
+        value = int(payload.get(field, 0) or 0)
+    except (TypeError, ValueError):
+        return None
+    if value < 0:
+        return None
+    return value
+
+
 def load_usage_totals(
     path: str | Path = "storage/logs/token_ledger.jsonl",
     *,
     video_id: str | None = None,
     day: date | None = None,
 ) -> UsageTotals:
-    """Read actual provider usage already recorded for the current UTC day.
+    """Read provider usage recorded for the selected UTC day.
 
-    Malformed ledger lines are ignored rather than breaking a job. The ledger
-    is observability data, not an authority for source/evidence claims.
+    Malformed ledger lines are ignored rather than allowed to subtract from or
+    otherwise weaken the guard. `guard_tokens` is stored for observability but
+    is deliberately recomputed from the four provider usage fields when read,
+    so a stale/tampered derived total cannot override the source counters.
     """
     target = Path(path)
     if not target.exists():
@@ -72,6 +84,13 @@ def load_usage_totals(
     selected_day = day or datetime.now(timezone.utc).date()
     daily_tokens = 0
     video_tokens = 0
+
+    token_fields = (
+        "input_tokens",
+        "output_tokens",
+        "cache_creation_input_tokens",
+        "cache_read_input_tokens",
+    )
 
     for raw_line in target.read_text(encoding="utf-8").splitlines():
         if not raw_line.strip():
@@ -85,16 +104,11 @@ def load_usage_totals(
         if timestamp.astimezone(timezone.utc).date() != selected_day:
             continue
 
-        guard_tokens = int(
-            payload.get(
-                "guard_tokens",
-                int(payload.get("input_tokens", 0) or 0)
-                + int(payload.get("output_tokens", 0) or 0)
-                + int(payload.get("cache_creation_input_tokens", 0) or 0)
-                + int(payload.get("cache_read_input_tokens", 0) or 0),
-            )
-            or 0
-        )
+        counters = [_nonnegative_int(payload, field) for field in token_fields]
+        if any(value is None for value in counters):
+            continue
+        guard_tokens = sum(value for value in counters if value is not None)
+
         daily_tokens += guard_tokens
         if video_id is not None and payload.get("video_id") == video_id:
             video_tokens += guard_tokens
