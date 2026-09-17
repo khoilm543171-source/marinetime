@@ -3,6 +3,8 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import threading
+import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -20,6 +22,14 @@ def _context(value: str) -> dict:
     if not isinstance(parsed, dict):
         raise argparse.ArgumentTypeError("--context-json must decode to an object")
     return parsed
+
+
+def _heartbeat(stop_event: threading.Event, *, interval_seconds: int = 30) -> None:
+    """Emit a periodic heartbeat so slow CPU preprocessing does not look hung."""
+    started = time.monotonic()
+    while not stop_event.wait(interval_seconds):
+        elapsed = round(time.monotonic() - started)
+        print(f"PILOT_PREPROCESS_RUNNING elapsed_seconds={elapsed}", flush=True)
 
 
 def parser() -> argparse.ArgumentParser:
@@ -62,6 +72,16 @@ def main() -> int:
         )
         return 2
 
+    stop_event = threading.Event()
+    heartbeat = threading.Thread(
+        target=_heartbeat,
+        args=(stop_event,),
+        kwargs={"interval_seconds": 30},
+        daemon=True,
+    )
+    print("PILOT_PREPROCESS_START", flush=True)
+    heartbeat.start()
+
     try:
         pack = preprocess_local_video(
             video_path=args.video,
@@ -78,6 +98,9 @@ def main() -> int:
     except (LocalPreprocessError, ValueError) as exc:
         print(f"PILOT_PREPROCESS_FAILED:{exc}", file=sys.stderr)
         return 1
+    finally:
+        stop_event.set()
+        heartbeat.join(timeout=1)
 
     print("PILOT_PREPROCESS_OK")
     print(f"source_id={pack['source_id']}")
