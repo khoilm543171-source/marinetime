@@ -56,6 +56,12 @@ class EvidencePackTests(unittest.TestCase):
         with self.assertRaisesRegex(EvidencePackError, "INVALID_TIMESTAMP_RANGE"):
             validate_evidence_pack(pack)
 
+    def test_rejects_unsupported_schema_version(self):
+        pack = base_pack()
+        pack["schema_version"] = "2.0"
+        with self.assertRaisesRegex(EvidencePackError, "UNSUPPORTED_SCHEMA_VERSION"):
+            validate_evidence_pack(pack)
+
 
 if __name__ == "__main__":
     unittest.main()
