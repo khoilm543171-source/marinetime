@@ -13,7 +13,6 @@ from marinetime.pipeline.alu_extract import ALUExtractionError, extract_alus  # 
 from marinetime.pipeline.evidence_pack import EvidencePackError  # noqa: E402
 
 
-SMOKE_VIDEO_ID = "alu-extraction-smoke-check"
 LEDGER = ROOT / "storage" / "logs" / "token_ledger.jsonl"
 EXPECTED_PROVENANCE = "creator_experience"
 
@@ -69,12 +68,12 @@ def main() -> int:
             result = extract_alus(
                 client=client,
                 evidence_pack=smoke_pack(),
-                video_id=SMOKE_VIDEO_ID,
                 repo_root=ROOT,
                 usage_log_path=LEDGER,
             )
     except (
         ValueError,
+        TypeError,
         ClaudeAPIError,
         TokenBudgetBlocked,
         EvidencePackError,
