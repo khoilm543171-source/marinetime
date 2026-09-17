@@ -40,8 +40,6 @@ def run_task(
     task: str,
     dynamic_input: str,
     video_id: str | None = None,
-    current_video_tokens: int | None = None,
-    current_daily_tokens: int | None = None,
     max_output_tokens: int | None = None,
     repo_root: str | Path = ".",
     token_limits: TokenLimits = TokenLimits(),
@@ -50,21 +48,16 @@ def run_task(
     spec, system_prompt = load_prompt(task, repo_root=repo_root)
     output_limit = max_output_tokens or spec.default_max_output_tokens
 
-    # Prefer actual usage already observed from provider responses. Explicit
-    # counters remain available for deterministic tests and controlled callers.
-    if current_video_tokens is None or current_daily_tokens is None:
-        totals = load_usage_totals(usage_log_path, video_id=video_id)
-        if current_video_tokens is None:
-            current_video_tokens = totals.video_tokens
-        if current_daily_tokens is None:
-            current_daily_tokens = totals.daily_tokens
+    # Runtime budget state always comes from observed provider usage in the
+    # ledger. Callers cannot supply smaller counters to reset/bypass the guard.
+    totals = load_usage_totals(usage_log_path, video_id=video_id)
 
     estimated_input = conservative_text_token_estimate(system_prompt + "\n" + dynamic_input)
     assert_token_budget(
         estimated_input_tokens=estimated_input,
         requested_output_tokens=output_limit,
-        current_video_tokens=current_video_tokens,
-        current_daily_tokens=current_daily_tokens,
+        current_video_tokens=totals.video_tokens,
+        current_daily_tokens=totals.daily_tokens,
         limits=token_limits,
     )
 
