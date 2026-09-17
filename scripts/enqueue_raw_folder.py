@@ -9,6 +9,9 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from marinetime.pilot.queue import enqueue_raw_folder  # noqa: E402
+from marinetime.pilot.queue_reconcile import (  # noqa: E402
+    reconcile_queue_with_existing_evidence,
+)
 
 
 def _context(value: str) -> dict:
@@ -27,6 +30,12 @@ def parser() -> argparse.ArgumentParser:
     )
     p.add_argument("--input", type=Path, default=ROOT / "storage" / "raw")
     p.add_argument("--db", type=Path, default=ROOT / "storage" / "marinetime.sqlite3")
+    p.add_argument(
+        "--evidence-root",
+        type=Path,
+        default=ROOT / "storage" / "evidence",
+        help="Existing evidence tree used to adopt videos that were processed before the queue existed.",
+    )
     p.add_argument(
         "--provenance",
         default="creator_experience",
@@ -56,6 +65,10 @@ def main() -> int:
             context=args.context_json,
             recursive=args.recursive,
         )
+        reconcile = reconcile_queue_with_existing_evidence(
+            db_path=args.db,
+            evidence_root=args.evidence_root,
+        )
     except ValueError as exc:
         print(f"QUEUE_ENQUEUE_FAILED:{exc}", file=sys.stderr)
         return 1
@@ -64,6 +77,10 @@ def main() -> int:
     print(f"discovered={result.discovered}")
     print(f"enqueued={result.enqueued}")
     print(f"skipped_existing={result.skipped_existing}")
+    print(f"adopted_existing_evidence={reconcile.adopted_jobs}")
+    print(f"existing_artifacts_scanned={reconcile.scanned_artifacts}")
+    print(f"invalid_existing_artifacts={reconcile.skipped_invalid_artifacts}")
+    print(f"existing_identity_conflicts={reconcile.skipped_conflicts}")
     print(f"db={args.db}")
     return 0
 
