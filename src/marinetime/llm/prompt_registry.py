@@ -15,9 +15,9 @@ class PromptSpec:
 PROMPTS: dict[str, PromptSpec] = {
     "alu_extract": PromptSpec(
         task="alu_extract",
-        version="alu_extraction_v3",
-        path=Path("prompts/alu_extraction_v3.txt"),
-        default_max_output_tokens=6_000,
+        version="alu_extraction_v4",
+        path=Path("prompts/alu_extraction_v4.txt"),
+        default_max_output_tokens=2_500,
     ),
     "lesson_build": PromptSpec(
         task="lesson_build",
