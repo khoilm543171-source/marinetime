@@ -20,7 +20,7 @@ Each ALU object must contain:
 - context_requirement: minimal | equipment_specific | maker_specific | vessel_specific | regulatory_specific
 - provenance_class: exactly the EvidencePack provenance_class; never promote or change it
 - verification_status: always "unverified"
-- context: object; use only context supported by the EvidencePack/evidence and leave unknown values unknown
+- context: object; known values must be copied from EvidencePack.context exactly. You may omit fields or keep unknown values unknown, but never promote an unknown/missing EvidencePack context value into a known value.
 - safety: {"safety_critical": boolean, "numeric_claim": boolean}
 - numeric: object or null
 - relation: object or null
@@ -37,6 +37,7 @@ Hard rules:
 - No evidence -> no factual ALU statement.
 - Never invent evidence_id values.
 - Do not infer missing maker/model/vessel/regulatory context.
+- If evidence appears to reveal context not already represented in EvidencePack.context, leave it unknown in the ALU; context promotion belongs to an explicit upstream recovery/update step.
 - Do not normalize creator/onboard experience into a universal procedure.
 - Never repair uncertain OCR or numeric values by guessing a plausible number.
 - Do not output authoritative_operational rendering scope.
