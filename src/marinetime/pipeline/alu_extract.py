@@ -97,6 +97,30 @@ def _require_object_or_null(item: dict[str, Any], field: str, index: int) -> Non
         raise ALUExtractionError(f"ALU_{index}_INVALID_{field.upper()}")
 
 
+def _is_unknown_context_value(value: Any) -> bool:
+    return value in (None, "", "unknown", [])
+
+
+def _validate_context_boundary(
+    alu_context: dict[str, Any],
+    evidence_context: dict[str, Any],
+    index: int,
+) -> None:
+    """Prevent the model from promoting unknown source context into known facts.
+
+    ALU context may narrow to a subset of EvidencePack context, but a known value
+    must already exist with the same value in the validated EvidencePack.
+    """
+    for key, value in alu_context.items():
+        if _is_unknown_context_value(value):
+            continue
+        source_value = evidence_context.get(key)
+        if _is_unknown_context_value(source_value):
+            raise ALUExtractionError(f"ALU_{index}_CONTEXT_PROMOTION_FORBIDDEN:{key}")
+        if value != source_value:
+            raise ALUExtractionError(f"ALU_{index}_CONTEXT_MISMATCH:{key}")
+
+
 def _decode_payload(text: str) -> list[dict[str, Any]]:
     try:
         payload = json.loads(text)
@@ -121,12 +145,12 @@ def parse_alu_response(
     """Parse and deterministically validate one semantic extraction response.
 
     Model output is never silently repaired. A malformed contract, fabricated
-    evidence reference, duplicate ALU id, source/provenance mismatch, operational
-    scope claim, or a model trying to self-mark an extraction as verified rejects
-    the extraction artifact.
+    evidence reference, duplicate ALU id, source/provenance/context mismatch,
+    operational scope claim, or model self-verification rejects the artifact.
     """
     summary: EvidencePackSummary = validate_evidence_pack(evidence_pack)
     candidates = _decode_payload(text)
+    evidence_context = evidence_pack["context"]
     seen_alu_ids: set[str] = set()
     validated: list[ValidatedALU] = []
 
@@ -169,8 +193,10 @@ def parse_alu_response(
             if not isinstance(ref, str) or ref not in summary.evidence_ids:
                 raise ALUExtractionError(f"ALU_{index}_UNKNOWN_EVIDENCE_REF:{ref}")
 
-        if not isinstance(alu.get("context"), dict):
+        alu_context = alu.get("context")
+        if not isinstance(alu_context, dict):
             raise ALUExtractionError(f"ALU_{index}_INVALID_CONTEXT")
+        _validate_context_boundary(alu_context, evidence_context, index)
 
         safety = alu.get("safety")
         if not isinstance(safety, dict):
