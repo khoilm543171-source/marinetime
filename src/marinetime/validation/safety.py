@@ -4,6 +4,9 @@ from dataclasses import dataclass
 from typing import Any
 
 
+OPERATIONAL_AUTHORITY_PROVENANCE = {"standard", "maker_manual", "regulatory"}
+
+
 @dataclass(frozen=True)
 class ValidationDecision:
     accepted_for_reference: bool
@@ -16,10 +19,20 @@ def _is_unknown(value: Any) -> bool:
     return value in (None, "", "unknown", [])
 
 
+def _numeric_evidence_is_linked(source_evidence: Any, evidence_refs: list[str]) -> bool:
+    if isinstance(source_evidence, str):
+        return source_evidence in evidence_refs
+    if isinstance(source_evidence, list) and source_evidence:
+        return all(isinstance(ref, str) and ref in evidence_refs for ref in source_evidence)
+    return False
+
+
 def validate_alu(alu: dict[str, Any]) -> ValidationDecision:
     """Deterministic safety/provenance gate.
 
     The LLM may suggest fields, but this function decides use eligibility.
+    Operational permission requires every independent gate to pass; verification
+    alone can never promote educational/source-specific material to operations.
     """
     reasons: list[str] = []
     reference = True
@@ -37,26 +50,47 @@ def validate_alu(alu: dict[str, Any]) -> ValidationDecision:
         reasons.append("UNSUPPORTED_STATEMENT")
         educational = False
         operational = False
+    elif support != "directly_supported":
+        reasons.append("SUPPORT_INSUFFICIENT_FOR_OPERATION")
+        operational = False
 
     provenance = alu.get("provenance_class")
     rendering_scope = alu.get("rendering_scope")
+    if provenance not in OPERATIONAL_AUTHORITY_PROVENANCE:
+        reasons.append("PROVENANCE_NOT_OPERATIONAL_AUTHORITY")
+        operational = False
+
+    if rendering_scope != "authoritative_operational":
+        reasons.append("RENDERING_SCOPE_NOT_OPERATIONAL")
+        operational = False
+
     if provenance in {"creator_experience", "onboard_heuristic", "case_specific", "unverified"}:
         if rendering_scope == "authoritative_operational":
             reasons.append("PROVENANCE_SCOPE_VIOLATION")
             operational = False
 
+    verification_status = alu.get("verification_status")
+    if verification_status != "verified":
+        reasons.append("NOT_VERIFIED_FOR_OPERATION")
+        operational = False
+
     context = alu.get("context") or {}
-    requirement = alu.get("context_requirement", "minimal")
-    if requirement == "equipment_specific" and _is_unknown(context.get("equipment")):
+    required_scopes = {
+        alu.get("context_requirement", "minimal"),
+        alu.get("claim_scope", "minimal"),
+    }
+    if "equipment_specific" in required_scopes and _is_unknown(context.get("equipment")):
         reasons.append("EQUIPMENT_CONTEXT_MISSING")
         operational = False
-    if requirement == "maker_specific" and _is_unknown(context.get("maker")):
+    if "maker_specific" in required_scopes and _is_unknown(context.get("maker")):
         reasons.append("MAKER_CONTEXT_MISSING")
         operational = False
-    if requirement == "vessel_specific" and _is_unknown(context.get("vessel_type")):
+    if "vessel_specific" in required_scopes and _is_unknown(context.get("vessel_type")):
         reasons.append("VESSEL_CONTEXT_MISSING")
         operational = False
-    if requirement == "regulatory_specific" and _is_unknown(context.get("regulatory_context")):
+    if "regulatory_specific" in required_scopes and _is_unknown(
+        context.get("regulatory_context")
+    ):
         reasons.append("REGULATORY_CONTEXT_MISSING")
         operational = False
 
@@ -67,13 +101,22 @@ def validate_alu(alu: dict[str, Any]) -> ValidationDecision:
 
     if safety.get("numeric_claim"):
         numeric = alu.get("numeric") or {}
-        required_numeric = ("value", "unit", "measurement_condition", "equipment_context", "source_evidence")
+        required_numeric = (
+            "value",
+            "unit",
+            "measurement_condition",
+            "equipment_context",
+            "source_evidence",
+        )
         missing = [field for field in required_numeric if _is_unknown(numeric.get(field))]
         if missing:
             reasons.append("NUMERIC_CONTEXT_INCOMPLETE:" + ",".join(missing))
             operational = False
+        elif not _numeric_evidence_is_linked(numeric.get("source_evidence"), evidence_refs):
+            reasons.append("NUMERIC_SOURCE_EVIDENCE_MISMATCH")
+            operational = False
 
-    if alu.get("verification_status") == "rejected":
+    if verification_status == "rejected":
         reasons.append("VERIFICATION_REJECTED")
         educational = False
         operational = False

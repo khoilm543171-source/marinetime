@@ -15,19 +15,25 @@ Keep these concepts separate:
 
 Unverified or experience-based material may be displayed in reference/education mode with labels, but is not operational authority.
 
+For the MVP, operational authority uses an explicit provenance allowlist: `standard`, `maker_manual`, or `regulatory`. `textbook`, `creator_experience`, `onboard_heuristic`, `case_specific`, and `unverified` remain reference/education material even if another process later marks the ALU verified.
+
 ## 3. Safety
 Code, not the LLM, makes the final allow/deny decision for operational use.
-Reject operational use when any required condition fails, including missing evidence, missing units for numeric claims, missing required context, rejected verification, or provenance/scope violations.
+Reject operational use when any required condition fails, including missing evidence, non-direct support, non-authoritative provenance, non-operational rendering scope, missing units for numeric claims, missing required context, rejected/unverified status, or provenance/scope violations.
+
+Operational permission requires all independent gates together: direct support + allowed provenance + `authoritative_operational` rendering scope + verified status + required context + numeric evidence completeness/linkage when applicable. Verification by itself never grants operational permission.
 
 Never infer or repair uncertain numeric readings. Preserve the raw reading and uncertainty.
 
 ## 4. Context
-Use `context_requirement` to determine which fields are mandatory:
+Use both `claim_scope` and `context_requirement` when deciding which fields are mandatory:
 - minimal
 - equipment_specific
 - maker_specific
 - vessel_specific
 - regulatory_specific
+
+An ALU may only reuse known context already present in its validated EvidencePack. The extractor must not promote missing/unknown maker, model, vessel, equipment, or regulatory context into a known value. Context recovery/promotion requires an explicit upstream update with evidence.
 
 Unknown context is allowed to exist for reference/education. It may reduce retrieval priority or block operational use.
 
