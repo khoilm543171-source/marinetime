@@ -8,6 +8,7 @@ class EvidencePackError(ValueError):
     """Raised when an EvidencePack cannot be safely used downstream."""
 
 
+SUPPORTED_EVIDENCE_SCHEMA_VERSION = "1.0"
 PROVENANCE_CLASSES = {
     "standard",
     "maker_manual",
@@ -61,8 +62,13 @@ def validate_evidence_pack(pack: dict[str, Any]) -> EvidencePackSummary:
 
     if not _nonempty_string(pack.get("source_id")):
         raise EvidencePackError("INVALID_SOURCE_ID")
-    if not _nonempty_string(pack.get("schema_version")):
+
+    schema_version = pack.get("schema_version")
+    if not _nonempty_string(schema_version):
         raise EvidencePackError("INVALID_SCHEMA_VERSION")
+    if str(schema_version).strip() != SUPPORTED_EVIDENCE_SCHEMA_VERSION:
+        raise EvidencePackError(f"UNSUPPORTED_SCHEMA_VERSION:{schema_version}")
+
     if not _nonempty_string(pack.get("preprocess_version")):
         raise EvidencePackError("INVALID_PREPROCESS_VERSION")
 
