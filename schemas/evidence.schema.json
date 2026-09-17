@@ -32,8 +32,13 @@
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["evidence_id"],
-        "properties": {"evidence_id": {"type": "string", "minLength": 1}},
+        "required": ["evidence_id", "start_ms", "end_ms", "text"],
+        "properties": {
+          "evidence_id": {"type": "string", "minLength": 1},
+          "start_ms": {"type": "number", "minimum": 0},
+          "end_ms": {"type": "number", "minimum": 0},
+          "text": {"type": "string", "minLength": 1}
+        },
         "additionalProperties": true
       }
     },
@@ -41,8 +46,12 @@
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["evidence_id"],
-        "properties": {"evidence_id": {"type": "string", "minLength": 1}},
+        "required": ["evidence_id", "timestamp_ms", "text"],
+        "properties": {
+          "evidence_id": {"type": "string", "minLength": 1},
+          "timestamp_ms": {"type": "number", "minimum": 0},
+          "text": {"type": "string", "minLength": 1}
+        },
         "additionalProperties": true
       }
     },
@@ -50,8 +59,11 @@
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["evidence_id"],
-        "properties": {"evidence_id": {"type": "string", "minLength": 1}},
+        "required": ["evidence_id", "timestamp_ms"],
+        "properties": {
+          "evidence_id": {"type": "string", "minLength": 1},
+          "timestamp_ms": {"type": "number", "minimum": 0}
+        },
         "additionalProperties": true
       }
     },
