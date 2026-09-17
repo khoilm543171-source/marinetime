@@ -107,11 +107,7 @@ def _validate_context_boundary(
     evidence_context: dict[str, Any],
     index: int,
 ) -> None:
-    """Prevent the model from promoting unknown source context into known facts.
-
-    ALU context may narrow to a subset of EvidencePack context, but a known value
-    must already exist with the same value in the validated EvidencePack.
-    """
+    """Prevent the model from promoting unknown source context into known facts."""
     for key, value in alu_context.items():
         if _is_unknown_context_value(value):
             continue
@@ -122,12 +118,59 @@ def _validate_context_boundary(
             raise ALUExtractionError(f"ALU_{index}_CONTEXT_MISMATCH:{key}")
 
 
+def build_semantic_evidence_view(evidence_pack: dict[str, Any]) -> dict[str, Any]:
+    """Project a validated EvidencePack into the minimal text needed by Opus.
+
+    Geometry, hashes and artifact paths remain in the canonical EvidencePack and
+    are recoverable by stable evidence_id. They are not semantic input and can
+    consume a large token budget (especially OCR polygons), so they are omitted
+    from the model-facing view without changing provenance or traceability.
+    """
+    validate_evidence_pack(evidence_pack)
+
+    transcripts = [
+        {
+            "evidence_id": item["evidence_id"],
+            "start_ms": item["start_ms"],
+            "end_ms": item["end_ms"],
+            "text": item["text"],
+        }
+        for item in evidence_pack["transcript_segments"]
+    ]
+
+    ocr_hits: list[dict[str, Any]] = []
+    for item in evidence_pack["ocr_hits"]:
+        compact: dict[str, Any] = {
+            "evidence_id": item["evidence_id"],
+            "timestamp_ms": item["timestamp_ms"],
+            "text": item["text"],
+        }
+        score = item.get("score")
+        if isinstance(score, (int, float)) and not isinstance(score, bool):
+            compact["score"] = score
+        ocr_hits.append(compact)
+
+    frames = [
+        {"evidence_id": item["evidence_id"], "timestamp_ms": item["timestamp_ms"]}
+        for item in evidence_pack["frames"]
+    ]
+
+    return {
+        "schema_version": evidence_pack["schema_version"],
+        "source_id": evidence_pack["source_id"],
+        "provenance_class": evidence_pack["provenance_class"],
+        "context": evidence_pack["context"],
+        "transcript_segments": transcripts,
+        "ocr_hits": ocr_hits,
+        "frames": frames,
+        "preprocess_version": evidence_pack["preprocess_version"],
+    }
+
+
 def _decode_payload(text: str) -> list[dict[str, Any]]:
     stripped = text.strip()
     if not stripped:
         raise ALUExtractionError("MODEL_OUTPUT_EMPTY")
-    # Markdown is intentionally rejected, not silently stripped. The extractor
-    # contract requires a machine-readable JSON object from the provider.
     if stripped.startswith("```"):
         raise ALUExtractionError("MODEL_OUTPUT_WRAPPED_IN_MARKDOWN")
     try:
@@ -151,12 +194,7 @@ def parse_alu_response(
     text: str,
     evidence_pack: dict[str, Any],
 ) -> tuple[ValidatedALU, ...]:
-    """Parse and deterministically validate one semantic extraction response.
-
-    Model output is never silently repaired. A malformed contract, fabricated
-    evidence reference, duplicate ALU id, source/provenance/context mismatch,
-    operational scope claim, or model self-verification rejects the artifact.
-    """
+    """Parse and deterministically validate one semantic extraction response."""
     summary: EvidencePackSummary = validate_evidence_pack(evidence_pack)
     candidates = _decode_payload(text)
     evidence_context = evidence_pack["context"]
@@ -234,14 +272,10 @@ def extract_alus(
     repo_root: str | Path = ".",
     usage_log_path: str | Path = "storage/logs/token_ledger.jsonl",
 ) -> ALUExtractionResult:
-    """Run one semantic pass, with budget accounting bound to source identity.
-
-    The per-video token key is derived only from the validated EvidencePack
-    ``source_id``. Callers cannot supply a different id to reset or fragment the
-    per-video budget ledger.
-    """
+    """Run one semantic pass, with budget accounting bound to source identity."""
     summary = validate_evidence_pack(evidence_pack)
-    dynamic_input = json.dumps(evidence_pack, ensure_ascii=False, separators=(",", ":"))
+    semantic_view = build_semantic_evidence_view(evidence_pack)
+    dynamic_input = json.dumps(semantic_view, ensure_ascii=False, separators=(",", ":"))
     model_result = run_task(
         client=client,
         task="alu_extract",

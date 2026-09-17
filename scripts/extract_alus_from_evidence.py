@@ -11,10 +11,17 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from marinetime.config import ClaudeSettings  # noqa: E402
 from marinetime.llm.client import ClaudeAPIError, ClaudeClient  # noqa: E402
-from marinetime.llm.token_guard import TokenBudgetBlocked  # noqa: E402
+from marinetime.llm.prompt_registry import load_prompt  # noqa: E402
+from marinetime.llm.token_guard import (  # noqa: E402
+    TokenBudgetBlocked,
+    TokenLimits,
+    conservative_text_token_estimate,
+)
+from marinetime.llm.usage import load_usage_totals  # noqa: E402
 from marinetime.pipeline.alu_extract import (  # noqa: E402
     ALUExtractionError,
     ALUExtractionResult,
+    build_semantic_evidence_view,
     extract_alus,
 )
 from marinetime.pipeline.evidence_pack import EvidencePackError, validate_evidence_pack  # noqa: E402
@@ -71,6 +78,25 @@ def _write_json_atomic(path: Path, payload: dict[str, Any]) -> None:
     temp.replace(path)
 
 
+def _print_budget_preview(evidence_pack: dict[str, Any], source_id: str) -> None:
+    semantic_view = build_semantic_evidence_view(evidence_pack)
+    dynamic_input = json.dumps(semantic_view, ensure_ascii=False, separators=(",", ":"))
+    spec, system_prompt = load_prompt("alu_extract", repo_root=ROOT)
+    estimated_input = conservative_text_token_estimate(system_prompt + "\n" + dynamic_input)
+    totals = load_usage_totals(LEDGER, video_id=source_id)
+    limits = TokenLimits()
+    projected = estimated_input + spec.default_max_output_tokens
+
+    print(f"prompt_version={spec.version}")
+    print(f"estimated_input_tokens={estimated_input}")
+    print(f"requested_output_tokens={spec.default_max_output_tokens}")
+    print(f"video_tokens_before={totals.video_tokens}")
+    print(f"video_tokens_remaining={max(0, limits.max_tokens_per_video - totals.video_tokens)}")
+    print(f"projected_video_tokens={totals.video_tokens + projected}")
+    print(f"max_tokens_per_video={limits.max_tokens_per_video}")
+    print(f"daily_tokens_before={totals.daily_tokens}")
+
+
 def parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         description="Run one guarded Opus semantic pass over a validated local EvidencePack."
@@ -91,6 +117,7 @@ def main() -> int:
 
     print("OPUS_ALU_EXTRACTION_START")
     print(f"source_id={summary.source_id}")
+    _print_budget_preview(evidence_pack, summary.source_id)
 
     try:
         settings = ClaudeSettings.from_env()
