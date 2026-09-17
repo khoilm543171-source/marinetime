@@ -82,7 +82,7 @@ def detect_scenes(video_path: str | Path, *, threshold: float = 27.0) -> list[Sc
 
     try:
         raw_scenes = detect(str(source), ContentDetector(threshold=threshold))
-    except Exception as exc:  # third-party boundary
+    except Exception as exc:
         raise LocalPreprocessError(f"SCENE_DETECTION_FAILED:{type(exc).__name__}") from exc
 
     scenes: list[SceneWindow] = []
@@ -104,11 +104,7 @@ def transcribe_whisperx(
     compute_type: str | None = None,
     batch_size: int = 4,
 ) -> list[dict[str, Any]]:
-    """Run one local WhisperX ASR pass and normalize segment-level evidence.
-
-    Alignment/diarization are deliberately out of this first pilot slice. Segment timestamps
-    remain directly attributable to WhisperX output and are not repaired or guessed.
-    """
+    """Run one local WhisperX ASR pass and normalize segment-level evidence."""
     source = Path(audio_path)
     if not source.is_file():
         raise LocalPreprocessError("AUDIO_FILE_NOT_FOUND")
@@ -134,7 +130,7 @@ def transcribe_whisperx(
         )
         audio = whisperx.load_audio(str(source))
         result = model.transcribe(audio, batch_size=batch_size)
-    except Exception as exc:  # model/runtime/network cache boundary
+    except Exception as exc:
         raise LocalPreprocessError(f"WHISPERX_TRANSCRIBE_FAILED:{type(exc).__name__}") from exc
 
     raw_segments = result.get("segments") if isinstance(result, dict) else None
@@ -152,13 +148,7 @@ def transcribe_whisperx(
         end_ms = _seconds_to_ms(item.get("end"))
         if end_ms < start_ms:
             raise LocalPreprocessError("WHISPERX_SEGMENT_RANGE_INVALID")
-        segments.append(
-            {
-                "start_ms": start_ms,
-                "end_ms": end_ms,
-                "text": text.strip(),
-            }
-        )
+        segments.append({"start_ms": start_ms, "end_ms": end_ms, "text": text.strip()})
     return segments
 
 
@@ -183,22 +173,19 @@ def extract_frame_jpeg(
     output.parent.mkdir(parents=True, exist_ok=True)
 
     try:
-        _run(
-            [
-                ffmpeg,
-                "-ss",
-                f"{timestamp_ms / 1000:.3f}",
-                "-i",
-                str(source),
-                "-frames:v",
-                "1",
-                "-q:v",
-                "2",
-                "-y",
-                str(output),
-            ],
-            timeout=120,
-        )
+        _run([
+            ffmpeg,
+            "-ss",
+            f"{timestamp_ms / 1000:.3f}",
+            "-i",
+            str(source),
+            "-frames:v",
+            "1",
+            "-q:v",
+            "2",
+            "-y",
+            str(output),
+        ], timeout=120)
     except MediaToolError as exc:
         output.unlink(missing_ok=True)
         raise LocalPreprocessError(str(exc)) from exc
@@ -232,8 +219,15 @@ def ocr_frame_paddle(
     lang: str = "en",
     ocr_version: str = "PP-OCRv6",
     min_score: float = 0.0,
+    device: str = "cpu",
+    enable_mkldnn: bool = False,
 ) -> list[dict[str, Any]]:
-    """Run local PaddleOCR and preserve text, score, and polygons without correction."""
+    """Run local PaddleOCR while preserving source text exactly.
+
+    The pilot defaults to CPU with oneDNN/MKLDNN disabled because PaddleOCR's
+    default static CPU engine enables it, and that path can raise
+    NotImplementedError on some native Windows CPU/model combinations.
+    """
     source = Path(frame_path)
     if not source.is_file():
         raise LocalPreprocessError("FRAME_FILE_NOT_FOUND")
@@ -249,10 +243,16 @@ def ocr_frame_paddle(
             use_doc_orientation_classify=False,
             use_doc_unwarping=False,
             use_textline_orientation=False,
+            device=device,
+            enable_mkldnn=enable_mkldnn,
         )
         results = ocr.predict(str(source), text_rec_score_thresh=min_score)
-    except Exception as exc:  # third-party model/runtime boundary
-        raise LocalPreprocessError(f"PADDLEOCR_FAILED:{type(exc).__name__}") from exc
+    except Exception as exc:
+        detail = " ".join(str(exc).split())[:300]
+        suffix = f":{detail}" if detail else ""
+        raise LocalPreprocessError(
+            f"PADDLEOCR_FAILED:{type(exc).__name__}{suffix}"
+        ) from exc
 
     hits: list[dict[str, Any]] = []
     for result in results:
@@ -333,11 +333,7 @@ def preprocess_local_video(
     max_frames: int = 8,
     device: str = "cpu",
 ) -> dict[str, Any]:
-    """Run the first local raw-video pilot pass and persist traceable artifacts.
-
-    No LLM/provider call occurs here. Any model downloads are local WhisperX/PaddleOCR model
-    assets handled by their libraries on first use.
-    """
+    """Run the first local raw-video pilot pass and persist traceable artifacts."""
     video = Path(video_path)
     root = Path(output_dir)
     root.mkdir(parents=True, exist_ok=True)
@@ -374,23 +370,19 @@ def preprocess_local_video(
             timestamp_ms=timestamp_ms,
         )
         relative_path = frame_path.relative_to(root).as_posix()
-        frame_records.append(
-            {
+        frame_records.append({
+            "timestamp_ms": timestamp_ms,
+            "artifact_path": relative_path,
+            "content_hash": f"sha256:{sha256_file(frame_path)}",
+        })
+        for hit in ocr_frame_paddle(frame_path, lang=ocr_lang, device="cpu", enable_mkldnn=False):
+            ocr_records.append({
                 "timestamp_ms": timestamp_ms,
-                "artifact_path": relative_path,
-                "content_hash": f"sha256:{sha256_file(frame_path)}",
-            }
-        )
-        for hit in ocr_frame_paddle(frame_path, lang=ocr_lang):
-            ocr_records.append(
-                {
-                    "timestamp_ms": timestamp_ms,
-                    "text": hit["text"],
-                    "score": hit.get("score"),
-                    "polygon": hit.get("polygon"),
-                    "frame_artifact_path": relative_path,
-                }
-            )
+                "text": hit["text"],
+                "score": hit.get("score"),
+                "polygon": hit.get("polygon"),
+                "frame_artifact_path": relative_path,
+            })
 
     pack = build_local_evidence_pack(
         source_id=source_id,
