@@ -103,6 +103,13 @@ def check_local_stack() -> LocalStackReport:
         _python_module_capability("whisperx", required=True),
         _python_module_capability("scenedetect", required=True),
         _python_module_capability("paddleocr", required=True),
-        _executable_capability("nvidia-smi", [], required=False),
+        _executable_capability(
+            "nvidia-smi",
+            [
+                "--query-gpu=name,driver_version,memory.total",
+                "--format=csv,noheader",
+            ],
+            required=False,
+        ),
     )
     return LocalStackReport(capabilities=capabilities)
