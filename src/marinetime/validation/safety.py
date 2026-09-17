@@ -45,6 +45,11 @@ def validate_alu(alu: dict[str, Any]) -> ValidationDecision:
             reasons.append("PROVENANCE_SCOPE_VIOLATION")
             operational = False
 
+    verification_status = alu.get("verification_status")
+    if verification_status != "verified":
+        reasons.append("NOT_VERIFIED_FOR_OPERATION")
+        operational = False
+
     context = alu.get("context") or {}
     requirement = alu.get("context_requirement", "minimal")
     if requirement == "equipment_specific" and _is_unknown(context.get("equipment")):
@@ -73,7 +78,7 @@ def validate_alu(alu: dict[str, Any]) -> ValidationDecision:
             reasons.append("NUMERIC_CONTEXT_INCOMPLETE:" + ",".join(missing))
             operational = False
 
-    if alu.get("verification_status") == "rejected":
+    if verification_status == "rejected":
         reasons.append("VERIFICATION_REJECTED")
         educational = False
         operational = False
