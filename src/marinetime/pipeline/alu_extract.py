@@ -112,8 +112,8 @@ def parse_alu_response(
     """Parse and deterministically validate one semantic extraction response.
 
     Model output is never silently repaired. A malformed enum, fabricated
-    evidence reference, duplicate ALU id, or source mismatch rejects the
-    extraction artifact so the caller can inspect/recover deliberately.
+    evidence reference, duplicate ALU id, source/provenance mismatch, or a model
+    trying to self-mark an extraction as verified rejects the artifact.
     """
     summary: EvidencePackSummary = validate_evidence_pack(evidence_pack)
     candidates = _decode_payload(text)
@@ -136,8 +136,15 @@ def parse_alu_response(
         _require_enum(alu, "support_level", SUPPORT_LEVELS, index)
         _require_enum(alu, "rendering_scope", RENDERING_SCOPES, index)
         _require_enum(alu, "context_requirement", CONTEXT_REQUIREMENTS, index)
-        _require_enum(alu, "provenance_class", PROVENANCE_CLASSES, index)
-        _require_enum(alu, "verification_status", VERIFICATION_STATUSES, index)
+        provenance = _require_enum(alu, "provenance_class", PROVENANCE_CLASSES, index)
+        verification = _require_enum(
+            alu, "verification_status", VERIFICATION_STATUSES, index
+        )
+
+        if provenance != summary.provenance_class:
+            raise ALUExtractionError(f"ALU_{index}_PROVENANCE_MISMATCH")
+        if verification != "unverified":
+            raise ALUExtractionError(f"ALU_{index}_MODEL_SELF_VERIFICATION_FORBIDDEN")
 
         refs = alu.get("evidence_refs")
         if not isinstance(refs, list) or not refs:
