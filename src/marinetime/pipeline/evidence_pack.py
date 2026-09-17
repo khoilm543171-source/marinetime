@@ -8,9 +8,21 @@ class EvidencePackError(ValueError):
     """Raised when an EvidencePack cannot be safely used downstream."""
 
 
+PROVENANCE_CLASSES = {
+    "standard",
+    "maker_manual",
+    "regulatory",
+    "textbook",
+    "onboard_heuristic",
+    "creator_experience",
+    "case_specific",
+    "unverified",
+}
 REQUIRED_TOP_LEVEL = (
     "schema_version",
     "source_id",
+    "provenance_class",
+    "context",
     "transcript_segments",
     "ocr_hits",
     "frames",
@@ -22,6 +34,7 @@ EVIDENCE_COLLECTIONS = ("transcript_segments", "ocr_hits", "frames")
 @dataclass(frozen=True)
 class EvidencePackSummary:
     source_id: str
+    provenance_class: str
     evidence_ids: frozenset[str]
     transcript_count: int
     ocr_count: int
@@ -52,6 +65,12 @@ def validate_evidence_pack(pack: dict[str, Any]) -> EvidencePackSummary:
         raise EvidencePackError("INVALID_SCHEMA_VERSION")
     if not _nonempty_string(pack.get("preprocess_version")):
         raise EvidencePackError("INVALID_PREPROCESS_VERSION")
+
+    provenance_class = pack.get("provenance_class")
+    if provenance_class not in PROVENANCE_CLASSES:
+        raise EvidencePackError(f"INVALID_PROVENANCE_CLASS:{provenance_class}")
+    if not isinstance(pack.get("context"), dict):
+        raise EvidencePackError("INVALID_CONTEXT")
 
     evidence_ids: set[str] = set()
     counts: dict[str, int] = {}
@@ -87,6 +106,7 @@ def validate_evidence_pack(pack: dict[str, Any]) -> EvidencePackSummary:
 
     return EvidencePackSummary(
         source_id=str(pack["source_id"]).strip(),
+        provenance_class=str(provenance_class),
         evidence_ids=frozenset(evidence_ids),
         transcript_count=counts["transcript_segments"],
         ocr_count=counts["ocr_hits"],
