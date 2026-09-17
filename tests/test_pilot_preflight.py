@@ -13,6 +13,7 @@ from marinetime.pilot.preflight import (
     LocalStackReport,
     _executable_capability,
     _python_module_capability,
+    check_local_stack,
 )
 
 
@@ -51,6 +52,30 @@ class PilotPreflightTests(unittest.TestCase):
         result = _python_module_capability("whisperx", required=True)
         self.assertTrue(result.available)
         mocked.assert_called_once_with("whisperx")
+
+    @patch("marinetime.pilot.preflight._python_module_capability")
+    @patch("marinetime.pilot.preflight._executable_capability")
+    def test_gpu_probe_requests_useful_device_details(self, executable, module) -> None:
+        executable.side_effect = lambda name, args, required: Capability(
+            name, "executable", required, True, "ok"
+        )
+        module.side_effect = lambda name, required: Capability(
+            name, "python_module", required, True, "ok"
+        )
+
+        check_local_stack()
+
+        self.assertEqual(
+            executable.call_args_list[-1].args,
+            (
+                "nvidia-smi",
+                [
+                    "--query-gpu=name,driver_version,memory.total",
+                    "--format=csv,noheader",
+                ],
+            ),
+        )
+        self.assertFalse(executable.call_args_list[-1].kwargs["required"])
 
 
 if __name__ == "__main__":
