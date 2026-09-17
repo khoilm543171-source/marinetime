@@ -36,6 +36,15 @@ class SafetyValidationTests(unittest.TestCase):
         self.assertFalse(d.accepted_for_operational_use)
         self.assertIn("PROVENANCE_SCOPE_VIOLATION", d.reasons)
 
+    def test_unverified_alu_cannot_be_operational(self):
+        alu = self.base()
+        alu["verification_status"] = "unverified"
+        d = validate_alu(alu)
+        self.assertTrue(d.accepted_for_reference)
+        self.assertTrue(d.accepted_for_education)
+        self.assertFalse(d.accepted_for_operational_use)
+        self.assertIn("NOT_VERIFIED_FOR_OPERATION", d.reasons)
+
     def test_maker_specific_unknown_maker_blocks_operation(self):
         alu = self.base()
         alu["context_requirement"] = "maker_specific"
