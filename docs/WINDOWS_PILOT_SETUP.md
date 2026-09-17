@@ -2,6 +2,38 @@
 
 This setup is intentionally manual and staged. Do not let an agent silently install heavy media/ML dependencies on the user's machine.
 
+## 0. Python runtime for the ML pilot
+
+Marinetime core supports Python 3.11+, but the raw-video ML stack has narrower native-wheel compatibility. The observed Windows install failure on Python 3.14 came from WhisperX/CTranslate2 and PaddlePaddle wheel availability, not from Marinetime code.
+
+For the 3-video pilot, use Python 3.11 as the recommended baseline. Python 3.11 is also the version used by Marinetime CI. The current preflight treats Python 3.11-3.13 as the supported pilot band and rejects Python 3.14 for raw-video readiness.
+
+Keep an existing Python 3.14 environment intact while testing the compatible environment. On Windows:
+
+```powershell
+winget install --id Python.Python.3.11 -e
+```
+
+Open a new PowerShell window and verify the launcher can see it:
+
+```powershell
+py -0p
+py -3.11 --version
+```
+
+Create a separate pilot environment first:
+
+```powershell
+cd C:\Users\khoil\marinetime
+py -3.11 -m venv .venv311
+.\.venv311\Scripts\Activate.ps1
+python --version
+python -m pip install --upgrade pip setuptools wheel
+python -m pip install -e .
+```
+
+Do not delete the existing `.venv` until the 3.11 pilot environment is proven working.
+
 ## 1. FFmpeg + FFprobe
 
 Preferred Windows path when `winget` is available:
@@ -21,17 +53,15 @@ If the package ID is unavailable on the machine, install an official/reputable F
 
 ## 2. Python packages
 
-Use the Marinetime virtual environment and install packages one stage at a time so failures are attributable:
+With the Python 3.11 pilot environment active, install packages one stage at a time so failures are attributable:
 
 ```powershell
-.venv\Scripts\Activate.ps1
-python -m pip install --upgrade pip
-python -m pip install "scenedetect[opencv]"
+python -m pip install scenedetect opencv-python
 python -m pip install whisperx
 python -m pip install paddlepaddle paddleocr
 ```
 
-Do not pin arbitrary versions just to make installation pass. If one stage fails, stop there and capture the exact error before changing Python, CUDA, Torch, or package versions.
+Do not pin arbitrary package versions just to make installation pass. If one stage fails, stop there and capture the exact error before changing CUDA, Torch, or package versions.
 
 ## 3. GPU check
 
@@ -41,7 +71,7 @@ GPU acceleration is optional for the 3-video pilot. After WhisperX installs, ins
 python -c "import torch; print('cuda=', torch.cuda.is_available()); print('device=', torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'CPU')"
 ```
 
-CPU remains a valid fallback for the pilot, only slower.
+CPU remains a valid fallback for the pilot, only slower. Do not reinstall Torch for CUDA until the base CPU-compatible stack imports cleanly.
 
 ## 4. Re-run Marinetime preflight
 
@@ -64,6 +94,7 @@ The preflight is read-only and never installs packages.
 
 - no Opus/provider call is needed for setup;
 - never paste API keys into install commands or logs;
-- do not change the project Python version or CUDA/Torch stack merely to silence one package error without first recording the failure;
+- keep the Python 3.14 environment until the replacement environment is verified;
+- do not change CUDA/Torch merely to silence one package error without first recording the failure;
 - do not treat GPU availability as a requirement for pilot correctness;
-- raw video processing begins only after FFmpeg/FFprobe, WhisperX, PySceneDetect, and PaddleOCR are all detected.
+- raw video processing begins only after the Python ML runtime, FFmpeg/FFprobe, WhisperX, PySceneDetect, and PaddleOCR are all detected.
