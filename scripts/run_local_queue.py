@@ -12,7 +12,9 @@ sys.path.insert(0, str(ROOT / "src"))
 from marinetime.pilot.local_preprocess import preprocess_local_video  # noqa: E402
 from marinetime.pilot.preflight import check_local_stack  # noqa: E402
 from marinetime.pilot.queue import (  # noqa: E402
+    FAILED_PREPROCESS,
     QueueJob,
+    list_jobs,
     requeue_failed_jobs,
     run_local_queue,
 )
@@ -46,6 +48,23 @@ def _heartbeat(stop_event: threading.Event, source_id: str, interval_seconds: in
         )
 
 
+def _format_error(exc: Exception) -> str:
+    detail = " ".join(str(exc).split())[:500]
+    suffix = f":{detail}" if detail else ""
+    return f"{type(exc).__name__}{suffix}"
+
+
+def _print_failure_summary(db_path: Path) -> None:
+    failed_jobs = [job for job in list_jobs(db_path) if job.status == FAILED_PREPROCESS]
+    print("QUEUE_FAILURE_SUMMARY")
+    print(f"failed_jobs={len(failed_jobs)}")
+    for job in failed_jobs:
+        print(
+            f"failed_job source_id={job.source_id} attempts={job.attempts} "
+            f"file={job.video_path.name} error={job.last_error or 'UNKNOWN'}"
+        )
+
+
 def main() -> int:
     args = parser().parse_args()
     report = check_local_stack()
@@ -73,18 +92,27 @@ def main() -> int:
         )
         heartbeat.start()
         try:
-            pack = preprocess_local_video(
-                video_path=job.video_path,
-                output_dir=output_dir,
-                source_id=job.source_id,
-                provenance_class=job.provenance_class,
-                context=job.context,
-                whisper_model=args.whisper_model,
-                language=args.language,
-                ocr_lang=args.ocr_lang,
-                max_frames=args.max_frames,
-                device=args.device,
-            )
+            try:
+                pack = preprocess_local_video(
+                    video_path=job.video_path,
+                    output_dir=output_dir,
+                    source_id=job.source_id,
+                    provenance_class=job.provenance_class,
+                    context=job.context,
+                    whisper_model=args.whisper_model,
+                    language=args.language,
+                    ocr_lang=args.ocr_lang,
+                    max_frames=args.max_frames,
+                    device=args.device,
+                )
+            except Exception as exc:
+                print(
+                    f"QUEUE_JOB_FAILED source_id={job.source_id} file={job.video_path.name} "
+                    f"error={_format_error(exc)}",
+                    file=sys.stderr,
+                    flush=True,
+                )
+                raise
         finally:
             stop_event.set()
             heartbeat.join(timeout=1)
@@ -110,6 +138,7 @@ def main() -> int:
     print(f"ready={result.ready}")
     print(f"failed={result.failed}")
     print("opus_calls=0")
+    _print_failure_summary(args.db)
     return 0
 
 
