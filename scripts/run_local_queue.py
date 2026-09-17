@@ -9,6 +9,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
+from marinetime.pipeline.auto_alu import run_auto_alu_threshold  # noqa: E402
 from marinetime.pilot.local_preprocess import preprocess_local_video  # noqa: E402
 from marinetime.pilot.preflight import check_local_stack  # noqa: E402
 from marinetime.pilot.queue import (  # noqa: E402
@@ -22,7 +23,10 @@ from marinetime.pilot.queue import (  # noqa: E402
 
 def parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
-        description="Process queued raw videos sequentially with local tools only. No Opus/API call."
+        description=(
+            "Process queued raw videos sequentially. By default, when at least 20 validated "
+            "EvidencePacks are waiting without ALUs, automatically run guarded Opus ALU batches."
+        )
     )
     p.add_argument("--db", type=Path, default=ROOT / "storage" / "marinetime.sqlite3")
     p.add_argument(
@@ -35,6 +39,17 @@ def parser() -> argparse.ArgumentParser:
     p.add_argument("--device", choices=("cpu", "cuda"), default="cpu")
     p.add_argument("--limit", type=int, default=None)
     p.add_argument("--retry-failed", action="store_true")
+    p.add_argument(
+        "--auto-opus-threshold",
+        type=int,
+        default=20,
+        help="Number of ALU-missing EvidencePacks required before automatic Opus starts.",
+    )
+    p.add_argument(
+        "--local-only",
+        action="store_true",
+        help="Explicitly disable automatic Opus for this run.",
+    )
     return p
 
 
@@ -67,6 +82,10 @@ def _print_failure_summary(db_path: Path) -> None:
 
 def main() -> int:
     args = parser().parse_args()
+    if args.auto_opus_threshold <= 0:
+        print("QUEUE_WORKER_FAILED:AUTO_OPUS_THRESHOLD_MUST_BE_POSITIVE", file=sys.stderr)
+        return 2
+
     report = check_local_stack()
     if not report.raw_video_ready:
         print(
@@ -137,8 +156,25 @@ def main() -> int:
     print(f"processed={result.processed}")
     print(f"ready={result.ready}")
     print(f"failed={result.failed}")
-    print("opus_calls=0")
     _print_failure_summary(args.db)
+
+    if args.local_only:
+        print("OPUS_AUTO_DISABLED reason=LOCAL_ONLY")
+        print("opus_calls=0")
+        return 0
+
+    auto_result = run_auto_alu_threshold(
+        evidence_root=args.evidence_root,
+        repo_root=ROOT,
+        usage_log_path=ROOT / "storage" / "logs" / "token_ledger.jsonl",
+        threshold=args.auto_opus_threshold,
+    )
+    print(f"opus_calls={auto_result.attempted}")
+
+    if auto_result.paused_reason is not None:
+        return 3
+    if auto_result.failed > 0:
+        return 1
     return 0
 
 
