@@ -51,12 +51,15 @@ class TokenBudgetStatus:
 def conservative_text_token_estimate(text: str) -> int:
     """Conservative preflight estimate, not provider billing truth.
 
-    This prevents obvious runaway calls before a provider-specific token counter
-    is wired in. Actual usage is taken from the API response and ledger.
+    The first real smoke pass showed the previous len/3 heuristic could
+    under-estimate gateway-reported input usage enough to overshoot the
+    per-video budget. Use two characters per token as a deliberately cautious
+    fallback until a provider-specific tokenizer/count endpoint is wired in.
+    Actual usage is still taken from the API response and ledger.
     """
     if not text:
         return 0
-    return ceil(len(text) / 3)
+    return ceil(len(text) / 2)
 
 
 def get_token_budget_status(
