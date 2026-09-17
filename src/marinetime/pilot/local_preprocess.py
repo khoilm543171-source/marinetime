@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import math
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable
@@ -15,7 +16,7 @@ class LocalPreprocessError(RuntimeError):
     """Raised when deterministic/local preprocessing cannot produce safe artifacts."""
 
 
-PREPROCESS_VERSION = "local_video_v1"
+PREPROCESS_VERSION = "local_video_v1.1"
 
 
 @dataclass(frozen=True)
@@ -226,6 +227,17 @@ def _coerce_paddle_payload(result: Any) -> dict[str, Any] | None:
     return nested if isinstance(nested, dict) else payload
 
 
+def _paddle_cpu_compat_kwargs() -> dict[str, Any]:
+    """Apply the Paddle 3.3.x CPU workaround before importing PaddleOCR.
+
+    PaddleOCR/PaddleX CPU inference can force the PIR/oneDNN path and raise
+    ConvertPirAttribute2RuntimeAttribute NotImplementedError. The upstream
+    workaround is to disable PIR before import and disable MKL-DNN inference.
+    """
+    os.environ["FLAGS_enable_pir_api"] = "0"
+    return {"enable_mkldnn": False}
+
+
 def ocr_frame_paddle(
     frame_path: str | Path,
     *,
@@ -237,6 +249,8 @@ def ocr_frame_paddle(
     source = Path(frame_path)
     if not source.is_file():
         raise LocalPreprocessError("FRAME_FILE_NOT_FOUND")
+
+    compat_kwargs = _paddle_cpu_compat_kwargs()
     try:
         from paddleocr import PaddleOCR
     except ImportError as exc:
@@ -249,10 +263,15 @@ def ocr_frame_paddle(
             use_doc_orientation_classify=False,
             use_doc_unwarping=False,
             use_textline_orientation=False,
+            **compat_kwargs,
         )
         results = ocr.predict(str(source), text_rec_score_thresh=min_score)
     except Exception as exc:  # third-party model/runtime boundary
-        raise LocalPreprocessError(f"PADDLEOCR_FAILED:{type(exc).__name__}") from exc
+        detail = " ".join(str(exc).split())[:300]
+        suffix = f":{detail}" if detail else ""
+        raise LocalPreprocessError(
+            f"PADDLEOCR_FAILED:{type(exc).__name__}{suffix}"
+        ) from exc
 
     hits: list[dict[str, Any]] = []
     for result in results:
@@ -320,6 +339,20 @@ def build_local_evidence_pack(
     return pack
 
 
+def _prepare_retry_output(root: Path) -> Path:
+    """Clear only known partial artifacts while protecting a completed pack."""
+    if (root / "evidence_pack.json").exists():
+        raise LocalPreprocessError("OUTPUT_ALREADY_COMPLETE")
+    root.mkdir(parents=True, exist_ok=True)
+    (root / "audio.wav").unlink(missing_ok=True)
+    (root / "transcript_segments.json").unlink(missing_ok=True)
+    frames_dir = root / "frames"
+    frames_dir.mkdir(parents=True, exist_ok=True)
+    for frame in frames_dir.glob("frame_*.jpg"):
+        frame.unlink(missing_ok=True)
+    return frames_dir
+
+
 def preprocess_local_video(
     *,
     video_path: str | Path,
@@ -340,9 +373,7 @@ def preprocess_local_video(
     """
     video = Path(video_path)
     root = Path(output_dir)
-    root.mkdir(parents=True, exist_ok=True)
-    frames_dir = root / "frames"
-    frames_dir.mkdir(parents=True, exist_ok=True)
+    frames_dir = _prepare_retry_output(root)
 
     source_record = build_local_video_source(
         path=video,
@@ -357,6 +388,7 @@ def preprocess_local_video(
         language=language,
         device=device,
     )
+    _write_json_atomic(root / "transcript_segments.json", transcript)
 
     scenes = detect_scenes(video)
     timestamps = select_keyframe_timestamps(
@@ -413,7 +445,12 @@ def preprocess_local_video(
         "whisper_model": whisper_model,
         "language": language,
         "ocr_lang": ocr_lang,
+        "ocr_version": "PP-OCRv6",
         "device": device,
+        "paddle_cpu_compat": {
+            "FLAGS_enable_pir_api": "0",
+            "enable_mkldnn": False,
+        },
     }
 
     _write_json_atomic(root / "source.json", source_record)
