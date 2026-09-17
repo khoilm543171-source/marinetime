@@ -35,6 +35,23 @@ class SafetyValidationTests(unittest.TestCase):
         d = validate_alu(alu)
         self.assertFalse(d.accepted_for_operational_use)
         self.assertIn("PROVENANCE_SCOPE_VIOLATION", d.reasons)
+        self.assertIn("PROVENANCE_NOT_OPERATIONAL_AUTHORITY", d.reasons)
+
+    def test_textbook_is_not_operational_authority(self):
+        alu = self.base()
+        alu["provenance_class"] = "textbook"
+        d = validate_alu(alu)
+        self.assertTrue(d.accepted_for_education)
+        self.assertFalse(d.accepted_for_operational_use)
+        self.assertIn("PROVENANCE_NOT_OPERATIONAL_AUTHORITY", d.reasons)
+
+    def test_partial_support_is_not_operational(self):
+        alu = self.base()
+        alu["support_level"] = "partially_supported"
+        d = validate_alu(alu)
+        self.assertTrue(d.accepted_for_education)
+        self.assertFalse(d.accepted_for_operational_use)
+        self.assertIn("SUPPORT_INSUFFICIENT_FOR_OPERATION", d.reasons)
 
     def test_unverified_alu_cannot_be_operational(self):
         alu = self.base()
