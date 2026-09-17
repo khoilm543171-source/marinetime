@@ -26,7 +26,12 @@ class ClaudeClientTests(unittest.TestCase):
                     "model": "nghi/claude-opus-5",
                     "content": [{"type": "text", "text": "OK"}],
                     "stop_reason": "end_turn",
-                    "usage": {"input_tokens": 12, "output_tokens": 2},
+                    "usage": {
+                        "input_tokens": 12,
+                        "output_tokens": 2,
+                        "cache_creation_input_tokens": 3,
+                        "cache_read_input_tokens": 4,
+                    },
                 },
             )
 
@@ -41,6 +46,9 @@ class ClaudeClientTests(unittest.TestCase):
         self.assertEqual(result.text, "OK")
         self.assertEqual(result.usage.input_tokens, 12)
         self.assertEqual(result.usage.output_tokens, 2)
+        self.assertEqual(result.usage.cache_creation_input_tokens, 3)
+        self.assertEqual(result.usage.cache_read_input_tokens, 4)
+        self.assertEqual(result.usage.total_tokens, 14)
 
 
 if __name__ == "__main__":
