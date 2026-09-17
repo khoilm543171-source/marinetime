@@ -127,15 +127,16 @@ def _decode_payload(text: str) -> list[dict[str, Any]]:
     except json.JSONDecodeError as exc:
         raise ALUExtractionError("MODEL_OUTPUT_NOT_JSON") from exc
 
-    if isinstance(payload, dict):
-        payload = payload.get("alus")
-    if not isinstance(payload, list):
+    if not isinstance(payload, dict):
+        raise ALUExtractionError("MODEL_OUTPUT_MUST_BE_OBJECT_WITH_ALUS")
+    candidates = payload.get("alus")
+    if not isinstance(candidates, list):
         raise ALUExtractionError("MODEL_OUTPUT_MUST_CONTAIN_ALUS_ARRAY")
-    if not payload:
+    if not candidates:
         raise ALUExtractionError("MODEL_OUTPUT_EMPTY_ALUS")
-    if not all(isinstance(item, dict) for item in payload):
+    if not all(isinstance(item, dict) for item in candidates):
         raise ALUExtractionError("MODEL_OUTPUT_ALU_NOT_OBJECT")
-    return payload
+    return candidates
 
 
 def parse_alu_response(
@@ -189,9 +190,13 @@ def parse_alu_response(
         refs = alu.get("evidence_refs")
         if not isinstance(refs, list) or not refs:
             raise ALUExtractionError(f"ALU_{index}_MISSING_EVIDENCE_REFS")
+        seen_refs: set[str] = set()
         for ref in refs:
             if not isinstance(ref, str) or ref not in summary.evidence_ids:
                 raise ALUExtractionError(f"ALU_{index}_UNKNOWN_EVIDENCE_REF:{ref}")
+            if ref in seen_refs:
+                raise ALUExtractionError(f"ALU_{index}_DUPLICATE_EVIDENCE_REF:{ref}")
+            seen_refs.add(ref)
 
         alu_context = alu.get("context")
         if not isinstance(alu_context, dict):
