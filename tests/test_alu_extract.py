@@ -88,10 +88,21 @@ class ALUExtractionTests(unittest.TestCase):
         with self.assertRaisesRegex(ALUExtractionError, "CONTEXT_MISMATCH:equipment"):
             parse_alu_response(response_for(alu), pack)
 
+    def test_rejects_bare_alu_array(self):
+        text = json.dumps([base_alu()])
+        with self.assertRaisesRegex(ALUExtractionError, "MUST_BE_OBJECT_WITH_ALUS"):
+            parse_alu_response(text, base_pack())
+
     def test_rejects_unknown_evidence_reference(self):
         alu = base_alu()
         alu["evidence_refs"] = ["MADE-UP-REF"]
         with self.assertRaisesRegex(ALUExtractionError, "UNKNOWN_EVIDENCE_REF"):
+            parse_alu_response(response_for(alu), base_pack())
+
+    def test_rejects_duplicate_evidence_reference(self):
+        alu = base_alu()
+        alu["evidence_refs"] = ["SEG-001", "SEG-001"]
+        with self.assertRaisesRegex(ALUExtractionError, "DUPLICATE_EVIDENCE_REF"):
             parse_alu_response(response_for(alu), base_pack())
 
     def test_rejects_model_self_verification(self):
