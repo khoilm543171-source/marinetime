@@ -75,15 +75,35 @@ class ALUExtractionTests(unittest.TestCase):
             text=response_for(base_alu()),
             model="fake-model",
             task="alu_extract",
-            prompt_version="alu_extraction_v2",
+            prompt_version="alu_extraction_v3",
             input_tokens=10,
             output_tokens=5,
+            stop_reason="end_turn",
         )
         with patch("marinetime.pipeline.alu_extract.run_task", return_value=model_result) as mocked:
             result = extract_alus(client=object(), evidence_pack=base_pack())
 
         self.assertEqual(len(result.alus), 1)
         self.assertEqual(mocked.call_args.kwargs["video_id"], "VID-001")
+
+    def test_extract_rejects_provider_truncation_before_json_parse(self):
+        model_result = LLMTaskResult(
+            text='{"alus":[',
+            model="fake-model",
+            task="alu_extract",
+            prompt_version="alu_extraction_v3",
+            input_tokens=10,
+            output_tokens=6000,
+            stop_reason="max_tokens",
+        )
+        with patch("marinetime.pipeline.alu_extract.run_task", return_value=model_result):
+            with self.assertRaisesRegex(ALUExtractionError, "MODEL_OUTPUT_TRUNCATED:max_tokens"):
+                extract_alus(client=object(), evidence_pack=base_pack())
+
+    def test_rejects_markdown_wrapped_json_without_silent_repair(self):
+        text = "```json\n" + response_for(base_alu()) + "\n```"
+        with self.assertRaisesRegex(ALUExtractionError, "MODEL_OUTPUT_WRAPPED_IN_MARKDOWN"):
+            parse_alu_response(text, base_pack())
 
     def test_accepts_context_copied_from_evidence_pack(self):
         pack = base_pack()
