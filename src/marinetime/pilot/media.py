@@ -75,7 +75,10 @@ def probe_video(path: str | Path, *, ffprobe: str = "ffprobe") -> VideoProbe:
     except json.JSONDecodeError as exc:
         raise MediaToolError("FFPROBE_INVALID_JSON") from exc
 
-    streams = payload.get("streams") if isinstance(payload, dict) else None
+    if not isinstance(payload, dict):
+        raise MediaToolError("FFPROBE_PAYLOAD_INVALID")
+
+    streams = payload.get("streams")
     if not isinstance(streams, list):
         raise MediaToolError("FFPROBE_STREAMS_MISSING")
     video_stream = next(
@@ -86,7 +89,8 @@ def probe_video(path: str | Path, *, ffprobe: str = "ffprobe") -> VideoProbe:
         raise MediaToolError("VIDEO_STREAM_MISSING")
 
     duration_ms: int | None = None
-    duration_raw = (payload.get("format") or {}).get("duration") if isinstance(payload, dict) else None
+    format_payload = payload.get("format")
+    duration_raw = format_payload.get("duration") if isinstance(format_payload, dict) else None
     try:
         if duration_raw is not None:
             duration_ms = max(0, round(float(duration_raw) * 1000))
@@ -115,32 +119,48 @@ def extract_asr_wav(
     ffmpeg: str = "ffmpeg",
     overwrite: bool = False,
 ) -> Path:
-    """Extract deterministic mono 16 kHz PCM audio for ASR."""
+    """Extract deterministic mono 16 kHz PCM audio for ASR.
+
+    A failed FFmpeg invocation must not leave a newly-created partial WAV that a
+    later run could mistake for a completed artifact. Existing outputs are never
+    removed unless the caller explicitly requested overwrite.
+    """
     source = Path(source_path)
     output = Path(output_path)
     if not source.is_file():
         raise MediaToolError("MEDIA_FILE_NOT_FOUND")
-    if output.exists() and not overwrite:
+    existed_before = output.exists()
+    if existed_before and not overwrite:
         raise MediaToolError("OUTPUT_ALREADY_EXISTS")
     output.parent.mkdir(parents=True, exist_ok=True)
 
-    _run(
-        [
-            ffmpeg,
-            "-y" if overwrite else "-n",
-            "-i",
-            str(source),
-            "-vn",
-            "-ac",
-            "1",
-            "-ar",
-            "16000",
-            "-c:a",
-            "pcm_s16le",
-            str(output),
-        ],
-        timeout=300,
-    )
+    try:
+        _run(
+            [
+                ffmpeg,
+                "-y" if overwrite else "-n",
+                "-i",
+                str(source),
+                "-vn",
+                "-ac",
+                "1",
+                "-ar",
+                "16000",
+                "-c:a",
+                "pcm_s16le",
+                str(output),
+            ],
+            timeout=300,
+        )
+    except MediaToolError:
+        if not existed_before and output.exists():
+            output.unlink(missing_ok=True)
+        raise
+
     if not output.is_file():
         raise MediaToolError("AUDIO_OUTPUT_MISSING")
+    if output.stat().st_size <= 0:
+        if not existed_before:
+            output.unlink(missing_ok=True)
+        raise MediaToolError("AUDIO_OUTPUT_EMPTY")
     return output
