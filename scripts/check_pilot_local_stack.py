@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import platform
 import sys
 from pathlib import Path
 
@@ -13,6 +14,8 @@ from marinetime.pilot.preflight import check_local_stack  # noqa: E402
 def main() -> int:
     report = check_local_stack()
     payload = {
+        "platform": platform.platform(),
+        "python_version": platform.python_version(),
         "raw_video_ready": report.raw_video_ready,
         "missing_required": list(report.missing_required),
         "capabilities": [
