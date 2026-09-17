@@ -40,6 +40,7 @@ def base_alu():
         "statement_type": "creator_statement",
         "support_level": "directly_supported",
         "rendering_scope": "source_specific",
+        "claim_scope": "minimal",
         "context_requirement": "minimal",
         "provenance_class": "creator_experience",
         "verification_status": "unverified",
@@ -86,6 +87,30 @@ class ALUExtractionTests(unittest.TestCase):
         text = json.dumps({"alus": [alu, dict(alu)]})
         with self.assertRaisesRegex(ALUExtractionError, "DUPLICATE_ALU_ID"):
             parse_alu_response(text, base_pack())
+
+    def test_rejects_authoritative_operational_scope_from_extractor(self):
+        alu = base_alu()
+        alu["rendering_scope"] = "authoritative_operational"
+        with self.assertRaisesRegex(ALUExtractionError, "INVALID_RENDERING_SCOPE"):
+            parse_alu_response(response_for(alu), base_pack())
+
+    def test_rejects_missing_claim_scope(self):
+        alu = base_alu()
+        del alu["claim_scope"]
+        with self.assertRaisesRegex(ALUExtractionError, "INVALID_CLAIM_SCOPE"):
+            parse_alu_response(response_for(alu), base_pack())
+
+    def test_rejects_unsupported_schema_version(self):
+        alu = base_alu()
+        alu["schema_version"] = "2.0"
+        with self.assertRaisesRegex(ALUExtractionError, "UNSUPPORTED_SCHEMA_VERSION"):
+            parse_alu_response(response_for(alu), base_pack())
+
+    def test_rejects_missing_numeric_contract_field(self):
+        alu = base_alu()
+        del alu["numeric"]
+        with self.assertRaisesRegex(ALUExtractionError, "MISSING_NUMERIC"):
+            parse_alu_response(response_for(alu), base_pack())
 
 
 if __name__ == "__main__":
