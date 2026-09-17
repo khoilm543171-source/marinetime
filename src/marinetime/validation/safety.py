@@ -31,6 +31,8 @@ def validate_alu(alu: dict[str, Any]) -> ValidationDecision:
     """Deterministic safety/provenance gate.
 
     The LLM may suggest fields, but this function decides use eligibility.
+    Operational permission requires every independent gate to pass; verification
+    alone can never promote educational/source-specific material to operations.
     """
     reasons: list[str] = []
     reference = True
@@ -56,6 +58,10 @@ def validate_alu(alu: dict[str, Any]) -> ValidationDecision:
     rendering_scope = alu.get("rendering_scope")
     if provenance not in OPERATIONAL_AUTHORITY_PROVENANCE:
         reasons.append("PROVENANCE_NOT_OPERATIONAL_AUTHORITY")
+        operational = False
+
+    if rendering_scope != "authoritative_operational":
+        reasons.append("RENDERING_SCOPE_NOT_OPERATIONAL")
         operational = False
 
     if provenance in {"creator_experience", "onboard_heuristic", "case_specific", "unverified"}:
