@@ -4,6 +4,9 @@ from dataclasses import dataclass
 from typing import Any
 
 
+OPERATIONAL_AUTHORITY_PROVENANCE = {"standard", "maker_manual", "regulatory"}
+
+
 @dataclass(frozen=True)
 class ValidationDecision:
     accepted_for_reference: bool
@@ -37,9 +40,16 @@ def validate_alu(alu: dict[str, Any]) -> ValidationDecision:
         reasons.append("UNSUPPORTED_STATEMENT")
         educational = False
         operational = False
+    elif support != "directly_supported":
+        reasons.append("SUPPORT_INSUFFICIENT_FOR_OPERATION")
+        operational = False
 
     provenance = alu.get("provenance_class")
     rendering_scope = alu.get("rendering_scope")
+    if provenance not in OPERATIONAL_AUTHORITY_PROVENANCE:
+        reasons.append("PROVENANCE_NOT_OPERATIONAL_AUTHORITY")
+        operational = False
+
     if provenance in {"creator_experience", "onboard_heuristic", "case_specific", "unverified"}:
         if rendering_scope == "authoritative_operational":
             reasons.append("PROVENANCE_SCOPE_VIOLATION")
@@ -72,7 +82,13 @@ def validate_alu(alu: dict[str, Any]) -> ValidationDecision:
 
     if safety.get("numeric_claim"):
         numeric = alu.get("numeric") or {}
-        required_numeric = ("value", "unit", "measurement_condition", "equipment_context", "source_evidence")
+        required_numeric = (
+            "value",
+            "unit",
+            "measurement_condition",
+            "equipment_context",
+            "source_evidence",
+        )
         missing = [field for field in required_numeric if _is_unknown(numeric.get(field))]
         if missing:
             reasons.append("NUMERIC_CONTEXT_INCOMPLETE:" + ",".join(missing))
