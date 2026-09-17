@@ -44,6 +44,12 @@ class EvidencePackTests(unittest.TestCase):
         with self.assertRaisesRegex(EvidencePackError, "DUPLICATE_EVIDENCE_ID"):
             validate_evidence_pack(pack)
 
+    def test_rejects_noncanonical_evidence_id(self):
+        pack = base_pack()
+        pack["transcript_segments"][0]["evidence_id"] = " SEG-001 "
+        with self.assertRaisesRegex(EvidencePackError, "NONCANONICAL_EVIDENCE_ID"):
+            validate_evidence_pack(pack)
+
     def test_rejects_missing_provenance(self):
         pack = base_pack()
         del pack["provenance_class"]
@@ -54,6 +60,30 @@ class EvidencePackTests(unittest.TestCase):
         pack = base_pack()
         pack["transcript_segments"][0]["start_ms"] = 2000
         with self.assertRaisesRegex(EvidencePackError, "INVALID_TIMESTAMP_RANGE"):
+            validate_evidence_pack(pack)
+
+    def test_rejects_missing_transcript_timestamp(self):
+        pack = base_pack()
+        del pack["transcript_segments"][0]["start_ms"]
+        with self.assertRaisesRegex(EvidencePackError, "INVALID_TIMESTAMP"):
+            validate_evidence_pack(pack)
+
+    def test_rejects_missing_transcript_text(self):
+        pack = base_pack()
+        pack["transcript_segments"][0]["text"] = ""
+        with self.assertRaisesRegex(EvidencePackError, "MISSING_TEXT"):
+            validate_evidence_pack(pack)
+
+    def test_rejects_frame_without_timestamp(self):
+        pack = base_pack()
+        del pack["frames"][0]["timestamp_ms"]
+        with self.assertRaisesRegex(EvidencePackError, "FRAME_0_INVALID_TIMESTAMP"):
+            validate_evidence_pack(pack)
+
+    def test_rejects_ocr_without_text_or_timestamp(self):
+        pack = base_pack()
+        pack["ocr_hits"] = [{"evidence_id": "OCR-001", "timestamp_ms": 500}]
+        with self.assertRaisesRegex(EvidencePackError, "OCR_0_MISSING_TEXT"):
             validate_evidence_pack(pack)
 
     def test_rejects_unsupported_schema_version(self):
