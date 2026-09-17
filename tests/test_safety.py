@@ -14,6 +14,7 @@ class SafetyValidationTests(unittest.TestCase):
             "support_level": "directly_supported",
             "provenance_class": "maker_manual",
             "rendering_scope": "context_specific",
+            "claim_scope": "minimal",
             "context_requirement": "minimal",
             "context": {},
             "safety": {"safety_critical": False, "numeric_claim": False},
@@ -68,6 +69,16 @@ class SafetyValidationTests(unittest.TestCase):
         alu["context"] = {"maker": "unknown"}
         d = validate_alu(alu)
         self.assertFalse(d.accepted_for_operational_use)
+        self.assertIn("MAKER_CONTEXT_MISSING", d.reasons)
+
+    def test_claim_scope_also_enforces_required_context(self):
+        alu = self.base()
+        alu["claim_scope"] = "maker_specific"
+        alu["context_requirement"] = "minimal"
+        alu["context"] = {"maker": "unknown"}
+        d = validate_alu(alu)
+        self.assertFalse(d.accepted_for_operational_use)
+        self.assertIn("MAKER_CONTEXT_MISSING", d.reasons)
 
     def test_numeric_claim_requires_context(self):
         alu = self.base()
@@ -76,6 +87,35 @@ class SafetyValidationTests(unittest.TestCase):
         d = validate_alu(alu)
         self.assertFalse(d.accepted_for_operational_use)
         self.assertTrue(any(r.startswith("NUMERIC_CONTEXT_INCOMPLETE") for r in d.reasons))
+
+    def test_numeric_source_evidence_must_link_to_alu_evidence(self):
+        alu = self.base()
+        alu["safety"] = {"safety_critical": True, "numeric_claim": True}
+        alu["numeric"] = {
+            "value": 8,
+            "unit": "bar",
+            "measurement_condition": "running",
+            "equipment_context": "pump discharge",
+            "source_evidence": "SEG-99",
+        }
+        d = validate_alu(alu)
+        self.assertFalse(d.accepted_for_operational_use)
+        self.assertIn("NUMERIC_SOURCE_EVIDENCE_MISMATCH", d.reasons)
+
+    def test_complete_numeric_claim_can_pass_numeric_gate(self):
+        alu = self.base()
+        alu["safety"] = {"safety_critical": True, "numeric_claim": True}
+        alu["numeric"] = {
+            "value": 8,
+            "unit": "bar",
+            "measurement_condition": "running",
+            "equipment_context": "pump discharge",
+            "source_evidence": "SEG-01",
+        }
+        d = validate_alu(alu)
+        self.assertNotIn("NUMERIC_SOURCE_EVIDENCE_MISMATCH", d.reasons)
+        self.assertFalse(any(r.startswith("NUMERIC_CONTEXT_INCOMPLETE") for r in d.reasons))
+        self.assertTrue(d.accepted_for_operational_use)
 
 
 if __name__ == "__main__":
