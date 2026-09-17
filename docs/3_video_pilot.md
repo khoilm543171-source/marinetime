@@ -6,6 +6,17 @@ Choose exactly:
 2. a blurry/ambiguous video containing OCR or numeric risk;
 3. a creator heuristic/practical case.
 
+## Local raw-video preflight
+Before selecting or processing files, run:
+
+```powershell
+python scripts/check_pilot_local_stack.py
+```
+
+The check is read-only: it does not install packages or change the machine. Full raw-video pilot readiness currently requires FFmpeg, FFprobe, WhisperX, PySceneDetect (`scenedetect`), and PaddleOCR. `nvidia-smi` is reported when present but GPU availability is not a hard requirement for the pilot.
+
+Do not auto-install missing heavy dependencies from an agent. Record the missing capabilities first, then install deliberately on the user's machine.
+
 ## Required artifacts per video
 - Source record
 - Job manifest record
