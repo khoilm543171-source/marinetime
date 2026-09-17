@@ -19,6 +19,14 @@ def _is_unknown(value: Any) -> bool:
     return value in (None, "", "unknown", [])
 
 
+def _numeric_evidence_is_linked(source_evidence: Any, evidence_refs: list[str]) -> bool:
+    if isinstance(source_evidence, str):
+        return source_evidence in evidence_refs
+    if isinstance(source_evidence, list) and source_evidence:
+        return all(isinstance(ref, str) and ref in evidence_refs for ref in source_evidence)
+    return False
+
+
 def validate_alu(alu: dict[str, Any]) -> ValidationDecision:
     """Deterministic safety/provenance gate.
 
@@ -61,17 +69,22 @@ def validate_alu(alu: dict[str, Any]) -> ValidationDecision:
         operational = False
 
     context = alu.get("context") or {}
-    requirement = alu.get("context_requirement", "minimal")
-    if requirement == "equipment_specific" and _is_unknown(context.get("equipment")):
+    required_scopes = {
+        alu.get("context_requirement", "minimal"),
+        alu.get("claim_scope", "minimal"),
+    }
+    if "equipment_specific" in required_scopes and _is_unknown(context.get("equipment")):
         reasons.append("EQUIPMENT_CONTEXT_MISSING")
         operational = False
-    if requirement == "maker_specific" and _is_unknown(context.get("maker")):
+    if "maker_specific" in required_scopes and _is_unknown(context.get("maker")):
         reasons.append("MAKER_CONTEXT_MISSING")
         operational = False
-    if requirement == "vessel_specific" and _is_unknown(context.get("vessel_type")):
+    if "vessel_specific" in required_scopes and _is_unknown(context.get("vessel_type")):
         reasons.append("VESSEL_CONTEXT_MISSING")
         operational = False
-    if requirement == "regulatory_specific" and _is_unknown(context.get("regulatory_context")):
+    if "regulatory_specific" in required_scopes and _is_unknown(
+        context.get("regulatory_context")
+    ):
         reasons.append("REGULATORY_CONTEXT_MISSING")
         operational = False
 
@@ -92,6 +105,9 @@ def validate_alu(alu: dict[str, Any]) -> ValidationDecision:
         missing = [field for field in required_numeric if _is_unknown(numeric.get(field))]
         if missing:
             reasons.append("NUMERIC_CONTEXT_INCOMPLETE:" + ",".join(missing))
+            operational = False
+        elif not _numeric_evidence_is_linked(numeric.get("source_evidence"), evidence_refs):
+            reasons.append("NUMERIC_SOURCE_EVIDENCE_MISMATCH")
             operational = False
 
     if verification_status == "rejected":
