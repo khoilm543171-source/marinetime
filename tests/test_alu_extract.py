@@ -64,6 +64,30 @@ class ALUExtractionTests(unittest.TestCase):
         self.assertFalse(result[0].decision.accepted_for_operational_use)
         self.assertIn("NOT_VERIFIED_FOR_OPERATION", result[0].decision.reasons)
 
+    def test_accepts_context_copied_from_evidence_pack(self):
+        pack = base_pack()
+        pack["context"] = {"equipment": "centrifugal pump", "maker": "unknown"}
+        alu = base_alu()
+        alu["context"] = {"equipment": "centrifugal pump", "maker": "unknown"}
+        result = parse_alu_response(response_for(alu), pack)
+        self.assertEqual(result[0].alu["context"]["equipment"], "centrifugal pump")
+
+    def test_rejects_context_promotion_from_unknown(self):
+        pack = base_pack()
+        pack["context"] = {"maker": "unknown"}
+        alu = base_alu()
+        alu["context"] = {"maker": "MAN Energy Solutions"}
+        with self.assertRaisesRegex(ALUExtractionError, "CONTEXT_PROMOTION_FORBIDDEN:maker"):
+            parse_alu_response(response_for(alu), pack)
+
+    def test_rejects_context_value_mismatch(self):
+        pack = base_pack()
+        pack["context"] = {"equipment": "centrifugal pump"}
+        alu = base_alu()
+        alu["context"] = {"equipment": "positive displacement pump"}
+        with self.assertRaisesRegex(ALUExtractionError, "CONTEXT_MISMATCH:equipment"):
+            parse_alu_response(response_for(alu), pack)
+
     def test_rejects_unknown_evidence_reference(self):
         alu = base_alu()
         alu["evidence_refs"] = ["MADE-UP-REF"]
