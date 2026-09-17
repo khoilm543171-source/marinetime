@@ -1,0 +1,15 @@
+{
+  "$schema":"https://json-schema.org/draft/2020-12/schema",
+  "title":"EvidencePack",
+  "type":"object",
+  "required":["schema_version","source_id","transcript_segments","ocr_hits","frames","preprocess_version"],
+  "properties":{
+    "schema_version":{"type":"string"},
+    "source_id":{"type":"string"},
+    "transcript_segments":{"type":"array"},
+    "ocr_hits":{"type":"array"},
+    "frames":{"type":"array"},
+    "preprocess_version":{"type":"string"}
+  },
+  "additionalProperties":true
+}

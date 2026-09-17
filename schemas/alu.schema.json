@@ -1,0 +1,25 @@
+{
+  "$schema":"https://json-schema.org/draft/2020-12/schema",
+  "title":"AtomicLearningUnit",
+  "type":"object",
+  "required":["schema_version","alu_id","source_id","evidence_refs","statement","statement_type","support_level","rendering_scope","context_requirement","provenance_class","verification_status","context","safety"],
+  "properties":{
+    "schema_version":{"type":"string"},
+    "alu_id":{"type":"string"},
+    "source_id":{"type":"string"},
+    "evidence_refs":{"type":"array","minItems":1,"items":{"type":"string"}},
+    "statement":{"type":"string","minLength":1},
+    "statement_type":{"enum":["observed_fact","creator_statement","inferred_relationship","procedure","recommendation","question","unknown"]},
+    "support_level":{"enum":["directly_supported","partially_supported","context_limited","unsupported"]},
+    "rendering_scope":{"enum":["source_specific","context_specific","general_educational","authoritative_operational"]},
+    "claim_scope":{"enum":["minimal","equipment_specific","maker_specific","vessel_specific","regulatory_specific"]},
+    "context_requirement":{"enum":["minimal","equipment_specific","maker_specific","vessel_specific","regulatory_specific"]},
+    "provenance_class":{"enum":["standard","maker_manual","regulatory","textbook","onboard_heuristic","creator_experience","case_specific","unverified"]},
+    "verification_status":{"enum":["unverified","pending","verified","rejected"]},
+    "context":{"type":"object"},
+    "safety":{"type":"object","required":["safety_critical","numeric_claim"],"properties":{"safety_critical":{"type":"boolean"},"numeric_claim":{"type":"boolean"}}},
+    "numeric":{"type":["object","null"]},
+    "relation":{"type":["object","null"]}
+  },
+  "additionalProperties":true
+}

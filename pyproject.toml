@@ -1,0 +1,11 @@
+[project]
+name = "marinetime"
+version = "0.2.4"
+description = "Evidence-first Marine Engineering learning MVP"
+requires-python = ">=3.11"
+dependencies = [
+  "httpx>=0.27,<1",
+]
+
+[tool.ruff]
+line-length = 100

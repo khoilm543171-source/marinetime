@@ -1,0 +1,10 @@
+runtime:
+  default_retrieval_top_k: 3
+  max_retrieval_top_k: 5
+  allow_targeted_evidence_recovery: true
+  allow_full_source_reprocess: false
+
+use_modes:
+  - reference_mode
+  - educational_mode
+  - operational_safety_mode

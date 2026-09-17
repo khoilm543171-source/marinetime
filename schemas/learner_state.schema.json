@@ -1,0 +1,13 @@
+{
+  "$schema":"https://json-schema.org/draft/2020-12/schema",
+  "title":"LearnerState",
+  "type":"object",
+  "required":["concept_id","mastery_level","review_status"],
+  "properties":{
+    "concept_id":{"type":"string"},
+    "mastery_level":{"enum":["unseen","recognized","can_explain","can_apply","can_troubleshoot"]},
+    "review_status":{"enum":["not_scheduled","scheduled","due","overdue"]},
+    "evidence_of_mastery":{"type":"array"}
+  },
+  "additionalProperties":true
+}

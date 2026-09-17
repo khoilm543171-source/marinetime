@@ -1,0 +1,14 @@
+budget:
+  # Token kill-switches are the primary guard for quota-based providers.
+  max_input_tokens_per_call: 20000
+  max_output_tokens_per_call: 2500
+  max_tokens_per_video: 50000
+  max_daily_tokens: 9000000
+
+  # Optional cost guards when reliable cost data is available.
+  max_cost_per_video_usd: 0.50
+  max_cost_per_job_usd: 2.00
+  max_daily_cost_usd: 10.00
+
+  max_auto_retries: 1
+  max_llm_calls_per_video: 3

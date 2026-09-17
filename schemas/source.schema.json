@@ -1,0 +1,17 @@
+{
+  "$schema":"https://json-schema.org/draft/2020-12/schema",
+  "title":"Source",
+  "type":"object",
+  "required":["schema_version","source_id","media_type","provenance_class","content_hash"],
+  "properties":{
+    "schema_version":{"type":"string"},
+    "source_id":{"type":"string"},
+    "media_type":{"enum":["video","manual","note","textbook","regulation","image","external_document"]},
+    "provenance_class":{"enum":["standard","maker_manual","regulatory","textbook","onboard_heuristic","creator_experience","case_specific","unverified"]},
+    "content_hash":{"type":"string"},
+    "modified_time":{"type":["string","null"]},
+    "license_status":{"type":["string","null"]},
+    "owner":{"type":["string","null"]}
+  },
+  "additionalProperties":true
+}
