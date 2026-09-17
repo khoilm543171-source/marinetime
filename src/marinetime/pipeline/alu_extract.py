@@ -56,6 +56,7 @@ PROVENANCE_CLASSES = {
     "unverified",
 }
 VERIFICATION_STATUSES = {"unverified", "pending", "verified", "rejected"}
+TRUNCATION_STOP_REASONS = {"max_tokens", "max_output_tokens", "length"}
 
 
 @dataclass(frozen=True)
@@ -122,8 +123,15 @@ def _validate_context_boundary(
 
 
 def _decode_payload(text: str) -> list[dict[str, Any]]:
+    stripped = text.strip()
+    if not stripped:
+        raise ALUExtractionError("MODEL_OUTPUT_EMPTY")
+    # Markdown is intentionally rejected, not silently stripped. The extractor
+    # contract requires a machine-readable JSON object from the provider.
+    if stripped.startswith("```"):
+        raise ALUExtractionError("MODEL_OUTPUT_WRAPPED_IN_MARKDOWN")
     try:
-        payload = json.loads(text)
+        payload = json.loads(stripped)
     except json.JSONDecodeError as exc:
         raise ALUExtractionError("MODEL_OUTPUT_NOT_JSON") from exc
 
@@ -242,5 +250,7 @@ def extract_alus(
         repo_root=repo_root,
         usage_log_path=usage_log_path,
     )
+    if model_result.stop_reason in TRUNCATION_STOP_REASONS:
+        raise ALUExtractionError(f"MODEL_OUTPUT_TRUNCATED:{model_result.stop_reason}")
     alus = parse_alu_response(model_result.text, evidence_pack)
     return ALUExtractionResult(model_result=model_result, alus=alus)
