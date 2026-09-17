@@ -4,10 +4,16 @@ import json
 import os
 import sys
 import unittest
+from unittest.mock import patch
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
-from marinetime.pipeline.alu_extract import ALUExtractionError, parse_alu_response
+from marinetime.llm.router import LLMTaskResult
+from marinetime.pipeline.alu_extract import (
+    ALUExtractionError,
+    extract_alus,
+    parse_alu_response,
+)
 
 
 def base_pack():
@@ -63,6 +69,21 @@ class ALUExtractionTests(unittest.TestCase):
         self.assertTrue(result[0].decision.accepted_for_education)
         self.assertFalse(result[0].decision.accepted_for_operational_use)
         self.assertIn("NOT_VERIFIED_FOR_OPERATION", result[0].decision.reasons)
+
+    def test_extract_alus_binds_budget_key_to_evidence_source_id(self):
+        model_result = LLMTaskResult(
+            text=response_for(base_alu()),
+            model="fake-model",
+            task="alu_extract",
+            prompt_version="alu_extraction_v2",
+            input_tokens=10,
+            output_tokens=5,
+        )
+        with patch("marinetime.pipeline.alu_extract.run_task", return_value=model_result) as mocked:
+            result = extract_alus(client=object(), evidence_pack=base_pack())
+
+        self.assertEqual(len(result.alus), 1)
+        self.assertEqual(mocked.call_args.kwargs["video_id"], "VID-001")
 
     def test_accepts_context_copied_from_evidence_pack(self):
         pack = base_pack()
