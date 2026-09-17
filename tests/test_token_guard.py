@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import sys
 import unittest
 from pathlib import Path
@@ -8,6 +9,8 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from marinetime.llm.token_guard import (
+    MARINETIME_CLOSEOUT_DAILY_TOKENS,
+    MARINETIME_HARD_DAILY_TOKENS,
     TokenBudgetBlocked,
     TokenBudgetMode,
     TokenLimits,
@@ -16,11 +19,31 @@ from marinetime.llm.token_guard import (
 )
 
 
+def _budget_yaml_int(key: str) -> int:
+    text = (ROOT / "config" / "budget.yaml").read_text(encoding="utf-8")
+    match = re.search(rf"^\s+{re.escape(key)}:\s*(\d+)\s*$", text, flags=re.MULTILINE)
+    if not match:
+        raise AssertionError(f"missing integer key in budget.yaml: {key}")
+    return int(match.group(1))
+
+
 class TokenGuardTests(unittest.TestCase):
     def test_default_limits_preserve_three_million_token_reserve(self) -> None:
         limits = TokenLimits()
         self.assertEqual(limits.closeout_daily_tokens, 5_500_000)
         self.assertEqual(limits.max_daily_tokens, 7_000_000)
+        self.assertEqual(limits.closeout_daily_tokens, MARINETIME_CLOSEOUT_DAILY_TOKENS)
+        self.assertEqual(limits.max_daily_tokens, MARINETIME_HARD_DAILY_TOKENS)
+
+    def test_budget_yaml_matches_runtime_daily_limits(self) -> None:
+        self.assertEqual(
+            _budget_yaml_int("closeout_daily_tokens"),
+            MARINETIME_CLOSEOUT_DAILY_TOKENS,
+        )
+        self.assertEqual(
+            _budget_yaml_int("max_daily_tokens"),
+            MARINETIME_HARD_DAILY_TOKENS,
+        )
 
     def test_allows_small_call(self) -> None:
         assert_token_budget(
@@ -75,15 +98,21 @@ class TokenGuardTests(unittest.TestCase):
                 current_daily_tokens=6_999_999,
             )
 
-    def test_caller_cannot_raise_hard_cap_by_using_closeout_value(self) -> None:
-        limits = TokenLimits(closeout_daily_tokens=6_900_000)
-        self.assertEqual(limits.max_daily_tokens, 7_000_000)
+    def test_caller_cannot_configure_limit_above_project_hard_cap(self) -> None:
+        with self.assertRaisesRegex(ValueError, "EXCEEDS_MARINETIME_HARD_CAP"):
+            TokenLimits(max_daily_tokens=9_000_000)
+
+    def test_lower_custom_daily_limit_remains_allowed(self) -> None:
+        limits = TokenLimits(
+            closeout_daily_tokens=900_000,
+            max_daily_tokens=1_000_000,
+        )
         with self.assertRaisesRegex(TokenBudgetBlocked, "MAX_DAILY_TOKENS"):
             assert_token_budget(
                 estimated_input_tokens=100,
                 requested_output_tokens=100,
                 current_video_tokens=0,
-                current_daily_tokens=6_999_900,
+                current_daily_tokens=999_900,
                 limits=limits,
             )
 
