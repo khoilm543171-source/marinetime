@@ -15,13 +15,14 @@ from marinetime.pipeline.evidence_pack import EvidencePackError  # noqa: E402
 
 SMOKE_VIDEO_ID = "alu-extraction-smoke-check"
 LEDGER = ROOT / "storage" / "logs" / "token_ledger.jsonl"
+EXPECTED_PROVENANCE = "creator_experience"
 
 
 def smoke_pack() -> dict:
     return {
         "schema_version": "1.0",
         "source_id": "SMOKE-VID-001",
-        "provenance_class": "creator_experience",
+        "provenance_class": EXPECTED_PROVENANCE,
         "context": {
             "equipment": "centrifugal pump",
             "maker": "unknown",
@@ -40,6 +41,25 @@ def smoke_pack() -> dict:
         "frames": [],
         "preprocess_version": "synthetic-smoke-v1",
     }
+
+
+def _assert_live_invariants(result) -> str | None:
+    if not result.alus:
+        return "NO_ALUS_RETURNED"
+    if not any(item.decision.accepted_for_education for item in result.alus):
+        return "NO_EDUCATIONAL_ALU_ACCEPTED"
+
+    for item in result.alus:
+        alu = item.alu
+        if alu.get("provenance_class") != EXPECTED_PROVENANCE:
+            return "PROVENANCE_CHANGED"
+        if alu.get("verification_status") != "unverified":
+            return "MODEL_SELF_VERIFIED"
+        if alu.get("rendering_scope") == "authoritative_operational":
+            return "MODEL_CLAIMED_OPERATIONAL_SCOPE"
+        if item.decision.accepted_for_operational_use:
+            return "UNVERIFIED_ALU_BECAME_OPERATIONAL"
+    return None
 
 
 def main() -> int:
@@ -63,6 +83,11 @@ def main() -> int:
         print(f"FAILED: {exc}")
         return 1
 
+    invariant_error = _assert_live_invariants(result)
+    if invariant_error:
+        print(f"FAILED: {invariant_error}")
+        return 1
+
     print("ALU_EXTRACTION_OK")
     print(f"model={result.model_result.model}")
     print(f"prompt_version={result.model_result.prompt_version}")
@@ -75,6 +100,8 @@ def main() -> int:
             "alu="
             f"{alu['alu_id']} refs={alu['evidence_refs']} "
             f"provenance={alu['provenance_class']} "
+            f"verification={alu['verification_status']} "
+            f"claim_scope={alu['claim_scope']} "
             f"education={item.decision.accepted_for_education} "
             f"operation={item.decision.accepted_for_operational_use} "
             f"reasons={list(item.decision.reasons)}"
