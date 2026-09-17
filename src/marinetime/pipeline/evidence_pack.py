@@ -46,12 +46,20 @@ def _nonempty_string(value: Any) -> bool:
     return isinstance(value, str) and bool(value.strip())
 
 
-def validate_evidence_pack(pack: dict[str, Any]) -> EvidencePackSummary:
-    """Validate the traceability invariants required before any LLM call.
+def _valid_timestamp_ms(value: Any) -> bool:
+    return (
+        isinstance(value, (int, float))
+        and not isinstance(value, bool)
+        and value >= 0
+    )
 
-    This intentionally does not infer or repair missing evidence. Every reusable
-    evidence item must already have a stable ``evidence_id`` produced by the
-    deterministic preprocessing stage.
+
+def validate_evidence_pack(pack: dict[str, Any]) -> EvidencePackSummary:
+    """Validate traceability invariants before any semantic LLM call.
+
+    This function rejects malformed evidence instead of repairing it. Stable ids,
+    modality timestamps, source text, provenance, and context must already be
+    present from deterministic preprocessing/upstream source handling.
     """
     if not isinstance(pack, dict):
         raise EvidencePackError("EVIDENCE_PACK_NOT_OBJECT")
@@ -60,16 +68,20 @@ def validate_evidence_pack(pack: dict[str, Any]) -> EvidencePackSummary:
     if missing:
         raise EvidencePackError("MISSING_TOP_LEVEL:" + ",".join(missing))
 
-    if not _nonempty_string(pack.get("source_id")):
+    source_id = pack.get("source_id")
+    if not _nonempty_string(source_id):
         raise EvidencePackError("INVALID_SOURCE_ID")
+    if source_id != source_id.strip():
+        raise EvidencePackError("NONCANONICAL_SOURCE_ID")
 
     schema_version = pack.get("schema_version")
     if not _nonempty_string(schema_version):
         raise EvidencePackError("INVALID_SCHEMA_VERSION")
-    if str(schema_version).strip() != SUPPORTED_EVIDENCE_SCHEMA_VERSION:
+    if schema_version != SUPPORTED_EVIDENCE_SCHEMA_VERSION:
         raise EvidencePackError(f"UNSUPPORTED_SCHEMA_VERSION:{schema_version}")
 
-    if not _nonempty_string(pack.get("preprocess_version")):
+    preprocess_version = pack.get("preprocess_version")
+    if not _nonempty_string(preprocess_version):
         raise EvidencePackError("INVALID_PREPROCESS_VERSION")
 
     provenance_class = pack.get("provenance_class")
@@ -93,7 +105,10 @@ def validate_evidence_pack(pack: dict[str, Any]) -> EvidencePackSummary:
             evidence_id = item.get("evidence_id")
             if not _nonempty_string(evidence_id):
                 raise EvidencePackError(f"{collection.upper()}_{index}_MISSING_EVIDENCE_ID")
-            evidence_id = str(evidence_id).strip()
+            if evidence_id != evidence_id.strip():
+                raise EvidencePackError(
+                    f"{collection.upper()}_{index}_NONCANONICAL_EVIDENCE_ID"
+                )
             if evidence_id in evidence_ids:
                 raise EvidencePackError(f"DUPLICATE_EVIDENCE_ID:{evidence_id}")
             evidence_ids.add(evidence_id)
@@ -101,17 +116,28 @@ def validate_evidence_pack(pack: dict[str, Any]) -> EvidencePackSummary:
             if collection == "transcript_segments":
                 start_ms = item.get("start_ms")
                 end_ms = item.get("end_ms")
-                if start_ms is not None and end_ms is not None:
-                    if not isinstance(start_ms, (int, float)) or not isinstance(end_ms, (int, float)):
-                        raise EvidencePackError(f"TRANSCRIPT_{index}_INVALID_TIMESTAMP")
-                    if start_ms < 0 or end_ms < start_ms:
-                        raise EvidencePackError(f"TRANSCRIPT_{index}_INVALID_TIMESTAMP_RANGE")
+                if not _valid_timestamp_ms(start_ms) or not _valid_timestamp_ms(end_ms):
+                    raise EvidencePackError(f"TRANSCRIPT_{index}_INVALID_TIMESTAMP")
+                if end_ms < start_ms:
+                    raise EvidencePackError(f"TRANSCRIPT_{index}_INVALID_TIMESTAMP_RANGE")
+                if not _nonempty_string(item.get("text")):
+                    raise EvidencePackError(f"TRANSCRIPT_{index}_MISSING_TEXT")
+
+            elif collection == "ocr_hits":
+                if not _valid_timestamp_ms(item.get("timestamp_ms")):
+                    raise EvidencePackError(f"OCR_{index}_INVALID_TIMESTAMP")
+                if not _nonempty_string(item.get("text")):
+                    raise EvidencePackError(f"OCR_{index}_MISSING_TEXT")
+
+            elif collection == "frames":
+                if not _valid_timestamp_ms(item.get("timestamp_ms")):
+                    raise EvidencePackError(f"FRAME_{index}_INVALID_TIMESTAMP")
 
     if not evidence_ids:
         raise EvidencePackError("NO_EVIDENCE")
 
     return EvidencePackSummary(
-        source_id=str(pack["source_id"]).strip(),
+        source_id=source_id,
         provenance_class=str(provenance_class),
         evidence_ids=frozenset(evidence_ids),
         transcript_count=counts["transcript_segments"],
