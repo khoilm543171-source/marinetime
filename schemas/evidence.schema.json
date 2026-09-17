@@ -1,15 +1,61 @@
 {
-  "$schema":"https://json-schema.org/draft/2020-12/schema",
-  "title":"EvidencePack",
-  "type":"object",
-  "required":["schema_version","source_id","transcript_segments","ocr_hits","frames","preprocess_version"],
-  "properties":{
-    "schema_version":{"type":"string"},
-    "source_id":{"type":"string"},
-    "transcript_segments":{"type":"array"},
-    "ocr_hits":{"type":"array"},
-    "frames":{"type":"array"},
-    "preprocess_version":{"type":"string"}
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "EvidencePack",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "source_id",
+    "provenance_class",
+    "context",
+    "transcript_segments",
+    "ocr_hits",
+    "frames",
+    "preprocess_version"
+  ],
+  "properties": {
+    "schema_version": {"type": "string", "minLength": 1},
+    "source_id": {"type": "string", "minLength": 1},
+    "provenance_class": {
+      "enum": [
+        "standard",
+        "maker_manual",
+        "regulatory",
+        "textbook",
+        "onboard_heuristic",
+        "creator_experience",
+        "case_specific",
+        "unverified"
+      ]
+    },
+    "context": {"type": "object"},
+    "transcript_segments": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["evidence_id"],
+        "properties": {"evidence_id": {"type": "string", "minLength": 1}},
+        "additionalProperties": true
+      }
+    },
+    "ocr_hits": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["evidence_id"],
+        "properties": {"evidence_id": {"type": "string", "minLength": 1}},
+        "additionalProperties": true
+      }
+    },
+    "frames": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["evidence_id"],
+        "properties": {"evidence_id": {"type": "string", "minLength": 1}},
+        "additionalProperties": true
+      }
+    },
+    "preprocess_version": {"type": "string", "minLength": 1}
   },
-  "additionalProperties":true
+  "additionalProperties": true
 }
