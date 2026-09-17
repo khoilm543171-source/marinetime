@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib.util
 import shutil
 import subprocess
+import sys
 from dataclasses import dataclass
 from typing import Iterable
 
@@ -49,6 +50,32 @@ def _first_output_line(command: list[str]) -> str | None:
     if not output:
         return None
     return output.splitlines()[0].strip()
+
+
+def _python_runtime_capability(
+    version: tuple[int, int, int] | None = None,
+) -> Capability:
+    """Check the ML pilot runtime separately from Marinetime core Python support.
+
+    The core package can support newer Python versions, but the current raw-video
+    pilot depends on native ML wheels (WhisperX/CTranslate2/PaddlePaddle). The
+    observed Windows resolver failure on Python 3.14 makes 3.11-3.13 the current
+    supported pilot band. Python 3.11 is the recommended baseline because CI
+    already verifies Marinetime there and it maximizes wheel compatibility.
+    """
+    current = version or (sys.version_info.major, sys.version_info.minor, sys.version_info.micro)
+    major_minor = current[:2]
+    available = (3, 11) <= major_minor < (3, 14)
+    return Capability(
+        name="python_ml_runtime",
+        kind="python_runtime",
+        required_for_raw_video=True,
+        available=available,
+        detail=(
+            f"current={current[0]}.{current[1]}.{current[2]}; "
+            "pilot_supported=3.11-3.13; recommended=3.11"
+        ),
+    )
 
 
 def _executable_capability(
@@ -98,6 +125,7 @@ def check_local_stack() -> LocalStackReport:
     preflight because CPU execution remains a valid (slower) pilot path.
     """
     capabilities = (
+        _python_runtime_capability(),
         _executable_capability("ffmpeg", ["-version"], required=True),
         _executable_capability("ffprobe", ["-version"], required=True),
         _python_module_capability("whisperx", required=True),
