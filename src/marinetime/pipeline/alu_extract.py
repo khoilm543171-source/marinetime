@@ -16,6 +16,7 @@ class ALUExtractionError(ValueError):
     """Raised when model output cannot be trusted as a traceable ALU artifact."""
 
 
+SUPPORTED_ALU_SCHEMA_VERSION = "1.0"
 STATEMENT_TYPES = {
     "observed_fact",
     "creator_statement",
@@ -31,11 +32,10 @@ SUPPORT_LEVELS = {
     "context_limited",
     "unsupported",
 }
-RENDERING_SCOPES = {
+EXTRACTION_RENDERING_SCOPES = {
     "source_specific",
     "context_specific",
     "general_educational",
-    "authoritative_operational",
 }
 CONTEXT_REQUIREMENTS = {
     "minimal",
@@ -44,6 +44,7 @@ CONTEXT_REQUIREMENTS = {
     "vessel_specific",
     "regulatory_specific",
 }
+CLAIM_SCOPES = set(CONTEXT_REQUIREMENTS)
 PROVENANCE_CLASSES = {
     "standard",
     "maker_manual",
@@ -88,6 +89,14 @@ def _require_enum(
     return str(value)
 
 
+def _require_object_or_null(item: dict[str, Any], field: str, index: int) -> None:
+    if field not in item:
+        raise ALUExtractionError(f"ALU_{index}_MISSING_{field.upper()}")
+    value = item[field]
+    if value is not None and not isinstance(value, dict):
+        raise ALUExtractionError(f"ALU_{index}_INVALID_{field.upper()}")
+
+
 def _decode_payload(text: str) -> list[dict[str, Any]]:
     try:
         payload = json.loads(text)
@@ -111,9 +120,10 @@ def parse_alu_response(
 ) -> tuple[ValidatedALU, ...]:
     """Parse and deterministically validate one semantic extraction response.
 
-    Model output is never silently repaired. A malformed enum, fabricated
-    evidence reference, duplicate ALU id, source/provenance mismatch, or a model
-    trying to self-mark an extraction as verified rejects the artifact.
+    Model output is never silently repaired. A malformed contract, fabricated
+    evidence reference, duplicate ALU id, source/provenance mismatch, operational
+    scope claim, or a model trying to self-mark an extraction as verified rejects
+    the extraction artifact.
     """
     summary: EvidencePackSummary = validate_evidence_pack(evidence_pack)
     candidates = _decode_payload(text)
@@ -130,11 +140,17 @@ def parse_alu_response(
         if source_id != summary.source_id:
             raise ALUExtractionError(f"ALU_{index}_SOURCE_MISMATCH")
 
-        _require_nonempty_string(alu, "schema_version", index)
+        schema_version = _require_nonempty_string(alu, "schema_version", index)
+        if schema_version != SUPPORTED_ALU_SCHEMA_VERSION:
+            raise ALUExtractionError(
+                f"ALU_{index}_UNSUPPORTED_SCHEMA_VERSION:{schema_version}"
+            )
+
         _require_nonempty_string(alu, "statement", index)
         _require_enum(alu, "statement_type", STATEMENT_TYPES, index)
         _require_enum(alu, "support_level", SUPPORT_LEVELS, index)
-        _require_enum(alu, "rendering_scope", RENDERING_SCOPES, index)
+        _require_enum(alu, "rendering_scope", EXTRACTION_RENDERING_SCOPES, index)
+        _require_enum(alu, "claim_scope", CLAIM_SCOPES, index)
         _require_enum(alu, "context_requirement", CONTEXT_REQUIREMENTS, index)
         provenance = _require_enum(alu, "provenance_class", PROVENANCE_CLASSES, index)
         verification = _require_enum(
@@ -163,6 +179,9 @@ def parse_alu_response(
             raise ALUExtractionError(f"ALU_{index}_INVALID_SAFETY_CRITICAL")
         if not isinstance(safety.get("numeric_claim"), bool):
             raise ALUExtractionError(f"ALU_{index}_INVALID_NUMERIC_CLAIM")
+
+        _require_object_or_null(alu, "numeric", index)
+        _require_object_or_null(alu, "relation", index)
 
         validated.append(ValidatedALU(alu=alu, decision=validate_alu(alu)))
 
