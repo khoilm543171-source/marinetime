@@ -39,3 +39,11 @@ def test_alu_v5_prompt_locks_evidence_faithful_wording_rules() -> None:
     )
     for phrase in required_phrases:
         assert phrase in text
+
+
+def test_bug_audit_prompt_is_registered_and_guard_bounded() -> None:
+    spec, text = load_prompt("bug_audit", repo_root=ROOT)
+    assert spec.version == "bug_audit_v1"
+    assert spec.default_max_output_tokens <= TokenLimits().max_output_tokens_per_call
+    assert "Most likely root cause" in text
+    assert "Do not recommend disabling validation" in text
