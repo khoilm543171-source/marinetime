@@ -551,15 +551,24 @@ def render_course_markdown(course: LearningCourse) -> str:
                 "",
             ]
         )
-        for index, lesson in enumerate(track["lessons"], start=1):
-            note = ""
-            if lesson["safety_critical_items"] or lesson["numeric_items"]:
-                note = " · ⚠️ có nội dung cần đối chiếu trước khi áp dụng thực tế"
-            lines.append(
-                f"{index}. [{lesson['display_title']}]({lesson['lesson_path']})"
-                f" · {lesson['retrieval_questions']} câu tự kiểm tra{note}"
+        for module in track["modules"]:
+            lines.extend(
+                [
+                    f"#### {module['title']}",
+                    "",
+                    module["description"],
+                    "",
+                ]
             )
-        lines.append("")
+            for index, lesson in enumerate(module["lessons"], start=1):
+                note = ""
+                if lesson["safety_critical_items"] or lesson["numeric_items"]:
+                    note = " · ⚠️ cần đối chiếu trước khi áp dụng thực tế"
+                lines.append(
+                    f"{index}. [{lesson['display_title']}]({lesson['lesson_path']})"
+                    f" · {lesson['retrieval_questions']} câu tự kiểm tra{note}"
+                )
+            lines.append("")
 
     if course.sources_without_lesson or course.missing_alu_sources:
         lines.extend(
