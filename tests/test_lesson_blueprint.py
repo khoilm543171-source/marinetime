@@ -186,11 +186,11 @@ class LessonBlueprintTests(unittest.TestCase):
     def test_quick_check_is_specific_retrieval_practice(self) -> None:
         blueprint = build_lesson_blueprint(self._card())
         prompts = [item["prompt"] for item in blueprint.quick_check]
-        self.assertIn("list the four passage-planning stages", prompts[0].lower())
-        self.assertTrue(any("During appraisal" in prompt for prompt in prompts))
-        self.assertTrue(any("During planning" in prompt for prompt in prompts))
-        self.assertTrue(any("During execution" in prompt for prompt in prompts))
-        self.assertTrue(any("position and progress" in prompt for prompt in prompts))
+        self.assertIn("4 giai đoạn passage planning", prompts[0].lower())
+        self.assertTrue(any("Appraisal" in prompt for prompt in prompts))
+        self.assertTrue(any("Planning" in prompt for prompt in prompts))
+        self.assertTrue(any("Execution" in prompt for prompt in prompts))
+        self.assertTrue(any("Monitoring" in prompt for prompt in prompts))
 
     def test_creator_safety_content_creates_compact_authority_queue(self) -> None:
         blueprint = build_lesson_blueprint(self._card())
