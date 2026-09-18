@@ -537,7 +537,8 @@ def write_lesson_preview(
     root = Path(output_dir)
     root.mkdir(parents=True, exist_ok=True)
     json_path = root / "lesson_blueprint.json"
-    md_path = root / "lesson_preview.md"
+    md_path = root / "LESSON.md"
+    legacy_md_path = root / "lesson_preview.md"
 
     json_temp = json_path.with_suffix(".json.tmp")
     json_temp.write_text(
@@ -546,10 +547,16 @@ def write_lesson_preview(
     )
     json_temp.replace(json_path)
 
-    md_temp = md_path.with_suffix(".md.tmp")
-    md_temp.write_text(
-        render_lesson_preview(blueprint, evidence_anchors=evidence_anchors),
-        encoding="utf-8",
+    rendered = render_lesson_preview(
+        blueprint,
+        evidence_anchors=evidence_anchors,
     )
+    md_temp = md_path.with_suffix(".md.tmp")
+    md_temp.write_text(rendered, encoding="utf-8")
     md_temp.replace(md_path)
+
+    # Compatibility copy for older tooling. Learners should open LESSON.md.
+    legacy_temp = legacy_md_path.with_suffix(".md.tmp")
+    legacy_temp.write_text(rendered, encoding="utf-8")
+    legacy_temp.replace(legacy_md_path)
     return json_path, md_path
