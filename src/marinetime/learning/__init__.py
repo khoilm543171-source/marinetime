@@ -48,3 +48,5 @@ from .mastery import (
     render_mastery_state,
     write_json_atomic,
 )
+
+from .adaptive_review import build_adaptive_review_plan
