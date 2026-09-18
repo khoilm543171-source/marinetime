@@ -365,7 +365,8 @@ def extract_frame_image(
         mjpeg_failure = "mjpeg" in detail and (
             "invalid argument" in detail or "nothing was written" in detail
         )
-        if not mjpeg_failure:
+        empty_jpeg_output = "frame_output_missing" in detail
+        if not (mjpeg_failure or empty_jpeg_output):
             raise
 
     png_path = stem.with_suffix(".png")
