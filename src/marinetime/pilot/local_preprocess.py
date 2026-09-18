@@ -437,6 +437,31 @@ def build_local_evidence_pack(
     return pack
 
 
+def transcribe_video_audio(
+    *,
+    video_path: str | Path,
+    output_dir: str | Path,
+    has_audio: bool,
+    whisper_model: str,
+    language: str | None = None,
+    device: str = "cpu",
+    runtime: LocalModelRuntime | None = None,
+) -> list[dict[str, Any]]:
+    """Transcribe only when the probed source actually contains an audio stream."""
+    if not has_audio:
+        return []
+
+    audio_path = extract_asr_wav(video_path, Path(output_dir) / "audio.wav")
+    if runtime is None:
+        return transcribe_whisperx(
+            audio_path,
+            model_name=whisper_model,
+            language=language,
+            device=device,
+        )
+    return runtime.transcribe(audio_path)
+
+
 def preprocess_local_video(
     *,
     video_path: str | Path,
@@ -464,16 +489,15 @@ def preprocess_local_video(
         provenance_class=provenance_class,
     )
     probe = probe_video(video)
-    audio_path = extract_asr_wav(video, root / "audio.wav")
-    if runtime is None:
-        transcript = transcribe_whisperx(
-            audio_path,
-            model_name=whisper_model,
-            language=language,
-            device=device,
-        )
-    else:
-        transcript = runtime.transcribe(audio_path)
+    transcript = transcribe_video_audio(
+        video_path=video,
+        output_dir=root,
+        has_audio=probe.has_audio,
+        whisper_model=whisper_model,
+        language=language,
+        device=device,
+        runtime=runtime,
+    )
 
     scenes = detect_scenes(video)
     timestamps = select_keyframe_timestamps(

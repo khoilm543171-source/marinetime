@@ -11,7 +11,7 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from marinetime.pilot.media import MediaToolError, _parse_fraction, extract_asr_wav, probe_video
+from marinetime.pilot.media import MediaToolError, _parse_fraction, _run, extract_asr_wav, probe_video
 
 
 class PilotMediaTests(unittest.TestCase):
@@ -119,6 +119,22 @@ class PilotMediaTests(unittest.TestCase):
             with self.assertRaisesRegex(MediaToolError, "AUDIO_OUTPUT_EMPTY"):
                 extract_asr_wav(source, output)
             self.assertFalse(output.exists())
+
+
+    @patch("marinetime.pilot.media.subprocess.run")
+    def test_run_preserves_actionable_ffmpeg_context(self, mocked_run) -> None:
+        mocked_run.return_value = subprocess.CompletedProcess(
+            ["ffmpeg"],
+            1,
+            "",
+            "Input #0, mov\nStream map '0:a' matches no streams\n"
+            "To ignore this, add a trailing '?' to the map.\nConversion failed!\n",
+        )
+        with self.assertRaises(MediaToolError) as caught:
+            _run(["ffmpeg", "-i", "clip.mp4"])
+        message = str(caught.exception)
+        self.assertIn("matches no streams", message)
+        self.assertIn("Conversion failed!", message)
 
 
 if __name__ == "__main__":
