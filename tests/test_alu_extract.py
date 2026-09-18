@@ -11,6 +11,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 from marinetime.llm.router import LLMTaskResult
 from marinetime.pipeline.alu_extract import (
     ALUExtractionError,
+    build_bounded_semantic_evidence_view,
     extract_alus,
     parse_alu_response,
 )
@@ -187,6 +188,48 @@ class ALUExtractionTests(unittest.TestCase):
         del alu["numeric"]
         with self.assertRaisesRegex(ALUExtractionError, "MISSING_NUMERIC"):
             parse_alu_response(response_for(alu), base_pack())
+
+    def test_bounded_semantic_view_preserves_transcript_and_reduces_ocr(self):
+        pack = base_pack()
+        pack["ocr_hits"] = [
+            {
+                "evidence_id": f"OCR-{index:03d}",
+                "timestamp_ms": index * 100,
+                "text": ("SUBTITLE " + str(index % 8)) * 20,
+                "score": 0.9,
+            }
+            for index in range(120)
+        ]
+        full_chars = len(json.dumps(pack, ensure_ascii=False))
+        view, compacted = build_bounded_semantic_evidence_view(
+            pack,
+            max_dynamic_chars=3500,
+        )
+
+        self.assertTrue(compacted)
+        self.assertEqual(view["transcript_segments"], [
+            {
+                "evidence_id": "SEG-001",
+                "start_ms": 0,
+                "end_ms": 1200,
+                "text": "Example marine engineering statement",
+            }
+        ])
+        self.assertLess(len(view["ocr_hits"]), len(pack["ocr_hits"]))
+        self.assertLessEqual(
+            len(json.dumps(view, ensure_ascii=False, separators=(",", ":"))),
+            3500,
+        )
+        self.assertGreater(full_chars, 3500)
+
+    def test_bounded_semantic_view_rejects_when_transcript_base_alone_is_too_large(self):
+        pack = base_pack()
+        pack["transcript_segments"][0]["text"] = "x" * 5000
+        with self.assertRaisesRegex(ALUExtractionError, "SEMANTIC_BASE_EXCEEDS_INPUT_BUDGET"):
+            build_bounded_semantic_evidence_view(
+                pack,
+                max_dynamic_chars=1000,
+            )
 
 
 if __name__ == "__main__":

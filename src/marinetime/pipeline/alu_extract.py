@@ -167,6 +167,75 @@ def build_semantic_evidence_view(evidence_pack: dict[str, Any]) -> dict[str, Any
     }
 
 
+def _semantic_json_text(view: dict[str, Any]) -> str:
+    return json.dumps(view, ensure_ascii=False, separators=(",", ":"))
+
+
+def _evenly_sample(items: list[dict[str, Any]], count: int) -> list[dict[str, Any]]:
+    if count <= 0 or not items:
+        return []
+    if count >= len(items):
+        return list(items)
+    if count == 1:
+        return [items[len(items) // 2]]
+    last = len(items) - 1
+    indices = sorted({round(index * last / (count - 1)) for index in range(count)})
+    return [items[index] for index in indices]
+
+
+def build_bounded_semantic_evidence_view(
+    evidence_pack: dict[str, Any],
+    *,
+    max_dynamic_chars: int,
+) -> tuple[dict[str, Any], bool]:
+    """Fit model-facing evidence without mutating the canonical EvidencePack.
+
+    Transcript segments and frame anchors are preserved. OCR is supplemental and
+    often contains repeated subtitle detections, so only the model-facing OCR list
+    may be deterministically deduplicated and evenly sampled when the full view
+    would exceed the guarded input budget. Stable evidence IDs remain unchanged.
+    """
+    if max_dynamic_chars <= 0:
+        raise ValueError("MAX_DYNAMIC_CHARS_MUST_BE_POSITIVE")
+
+    full = build_semantic_evidence_view(evidence_pack)
+    if len(_semantic_json_text(full)) <= max_dynamic_chars:
+        return full, False
+
+    base = dict(full)
+    original_ocr = list(full["ocr_hits"])
+    base["ocr_hits"] = []
+    if len(_semantic_json_text(base)) > max_dynamic_chars:
+        raise ALUExtractionError("SEMANTIC_BASE_EXCEEDS_INPUT_BUDGET")
+
+    deduped: list[dict[str, Any]] = []
+    seen_text: set[str] = set()
+    for item in original_ocr:
+        normalized = " ".join(str(item.get("text", "")).lower().split())
+        if not normalized or normalized in seen_text:
+            continue
+        seen_text.add(normalized)
+        deduped.append(item)
+
+    low = 0
+    high = len(deduped)
+    best: list[dict[str, Any]] = []
+    while low <= high:
+        mid = (low + high) // 2
+        sampled = _evenly_sample(deduped, mid)
+        candidate = dict(base)
+        candidate["ocr_hits"] = sampled
+        if len(_semantic_json_text(candidate)) <= max_dynamic_chars:
+            best = sampled
+            low = mid + 1
+        else:
+            high = mid - 1
+
+    bounded = dict(base)
+    bounded["ocr_hits"] = best
+    return bounded, True
+
+
 def _decode_payload(text: str) -> list[dict[str, Any]]:
     stripped = text.strip()
     if not stripped:
@@ -271,11 +340,15 @@ def extract_alus(
     evidence_pack: dict[str, Any],
     repo_root: str | Path = ".",
     usage_log_path: str | Path = "storage/logs/token_ledger.jsonl",
+    semantic_view: dict[str, Any] | None = None,
 ) -> ALUExtractionResult:
     """Run one semantic pass, with budget accounting bound to source identity."""
     summary = validate_evidence_pack(evidence_pack)
-    semantic_view = build_semantic_evidence_view(evidence_pack)
-    dynamic_input = json.dumps(semantic_view, ensure_ascii=False, separators=(",", ":"))
+    if semantic_view is None:
+        semantic_view = build_semantic_evidence_view(evidence_pack)
+    if semantic_view.get("source_id") != summary.source_id:
+        raise ALUExtractionError("SEMANTIC_VIEW_SOURCE_MISMATCH")
+    dynamic_input = _semantic_json_text(semantic_view)
     model_result = run_task(
         client=client,
         task="alu_extract",
