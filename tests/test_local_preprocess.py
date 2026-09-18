@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sys
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -15,6 +16,7 @@ from marinetime.pilot.local_preprocess import (
     _seconds_to_ms,
     build_local_evidence_pack,
     select_keyframe_timestamps,
+    transcribe_video_audio,
 )
 
 
@@ -113,6 +115,18 @@ class LocalPreprocessTests(unittest.TestCase):
         self.assertIs(runtime._get_ocr_engine(), ocr_engine)
         self.assertIs(runtime._get_ocr_engine(), ocr_engine)
         self.assertEqual(calls, {"whisper": 1, "ocr": 1})
+
+
+    @patch("marinetime.pilot.local_preprocess.extract_asr_wav")
+    def test_no_audio_video_skips_asr_extraction(self, mocked_extract) -> None:
+        result = transcribe_video_audio(
+            video_path="silent.mp4",
+            output_dir="evidence",
+            has_audio=False,
+            whisper_model="small",
+        )
+        self.assertEqual(result, [])
+        mocked_extract.assert_not_called()
 
 
 if __name__ == "__main__":
