@@ -203,7 +203,7 @@ def _passage_profile(
         questions.append(
             {
                 "question_id": "Q-04",
-                "prompt": "What does this source say the bridge team does during execution?",
+                "prompt": "During execution, what does this source say the bridge team does?",
                 "answer_anchor": str(execution.get("statement", "")),
                 "alu_id": str(execution.get("alu_id", "")),
             }
