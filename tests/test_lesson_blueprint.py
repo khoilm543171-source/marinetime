@@ -170,9 +170,9 @@ class LessonBlueprintTests(unittest.TestCase):
         blueprint = build_lesson_blueprint(self._card())
         texts = [item.text for item in blueprint.learning_objectives]
         self.assertEqual(len(texts), 3)
-        self.assertTrue(texts[0].startswith("List the four passage-planning stages"))
-        self.assertTrue(texts[1].startswith("Explain what the source says"))
-        self.assertTrue(texts[2].startswith("Give a 60–90 second interview answer"))
+        self.assertIn("Nêu đúng thứ tự 4 giai đoạn", texts[0])
+        self.assertIn("Giải thích bằng tiếng Việt", texts[1])
+        self.assertIn("Trả lời phỏng vấn 60–90 giây", texts[2])
         self.assertFalse(any("The creator states that" in text for text in texts))
 
     def test_mental_model_is_stage_based(self) -> None:
@@ -205,14 +205,17 @@ class LessonBlueprintTests(unittest.TestCase):
             blueprint,
             evidence_anchors=card.evidence_anchors,
         )
-        self.assertIn("## Learning goals", text)
-        self.assertIn("## Mental model", text)
-        self.assertIn("## Learn the source", text)
-        self.assertIn("## Oral interview practice", text)
-        self.assertIn("## Retrieval practice", text)
-        self.assertIn("<summary>Show evidence</summary>", text)
-        self.assertIn("Interview question: **How do you make a passage plan?**", text)
-        self.assertIn("Authority check queued: **" if False else "Authority check queued", text)
+        self.assertIn("## Bạn sẽ học gì / What you will learn", text)
+        self.assertIn("## Học bài này trong 10–15 phút", text)
+        self.assertIn("## Bản đồ ý chính / Mental model", text)
+        self.assertIn("## English cần nhớ / Technical vocabulary", text)
+        self.assertIn("## Nội dung bài học", text)
+        self.assertIn("**English technical point**", text)
+        self.assertIn("**Giải thích tiếng Việt**", text)
+        self.assertIn("## Oral practice / Luyện nói", text)
+        self.assertIn("## Tự kiểm tra / Retrieval practice", text)
+        self.assertIn("<summary>Evidence / Nguồn gốc của ý này</summary>", text)
+        self.assertIn("**Interview question:** How do you make a passage plan?", text)
         self.assertNotIn("### 1. The creator states that passage planning", text)
 
     def test_trust_boundary_does_not_repeat_one_warning_per_safety_alu(self) -> None:
@@ -222,8 +225,10 @@ class LessonBlueprintTests(unittest.TestCase):
             blueprint,
             evidence_anchors=card.evidence_anchors,
         )
-        self.assertIn("Safety-critical source claims: 5.", text)
-        self.assertIn("Authority targets: ALU-001", text)
+        self.assertIn("## Lưu ý an toàn — đọc như người học", text)
+        self.assertIn("không phải lệnh thao tác trên tàu", text)
+        self.assertIn("<summary>Thông tin kiểm chứng kỹ thuật", text)
+        self.assertIn("Safety-critical items: 5.", text)
         self.assertNotIn("ALU-003: safety-critical content", text)
 
     def test_blueprint_json_marks_v11_and_authority_targets(self) -> None:
