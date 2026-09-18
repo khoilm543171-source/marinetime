@@ -47,6 +47,19 @@ class AutoALURunResult:
     skipped: int = 0
 
 
+GLOBAL_BUDGET_PAUSE_REASONS = {
+    "MARINETIME_DAILY_HARD_STOP",
+    "MARINETIME_CLOSEOUT_MODE",
+    "MARINETIME_CLOSEOUT_WOULD_BE_REACHED",
+    "MAX_DAILY_TOKENS",
+    "MAX_OUTPUT_TOKENS_PER_CALL",
+}
+
+
+def is_global_budget_pause(reason: str) -> bool:
+    return reason in GLOBAL_BUDGET_PAUSE_REASONS
+
+
 def _load_json_object(path: Path) -> dict[str, Any]:
     payload = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(payload, dict):
@@ -290,13 +303,7 @@ def run_auto_alu_threshold(
                 )
             except TokenBudgetBlocked as exc:
                 reason = str(exc)
-                if reason in {
-                    "MARINETIME_DAILY_HARD_STOP",
-                    "MARINETIME_CLOSEOUT_MODE",
-                    "MARINETIME_CLOSEOUT_WOULD_BE_REACHED",
-                    "MAX_DAILY_TOKENS",
-                    "MAX_OUTPUT_TOKENS_PER_CALL",
-                }:
+                if is_global_budget_pause(reason):
                     paused_reason = reason
                     print(
                         f"OPUS_AUTO_PAUSED source_id={candidate.source_id} reason={paused_reason}"
@@ -339,13 +346,7 @@ def run_auto_alu_threshold(
                 _write_json_atomic(candidate.output_path, artifact)
             except TokenBudgetBlocked as exc:
                 reason = str(exc)
-                if reason in {
-                    "MARINETIME_DAILY_HARD_STOP",
-                    "MARINETIME_CLOSEOUT_MODE",
-                    "MARINETIME_CLOSEOUT_WOULD_BE_REACHED",
-                    "MAX_DAILY_TOKENS",
-                    "MAX_OUTPUT_TOKENS_PER_CALL",
-                }:
+                if is_global_budget_pause(reason):
                     paused_reason = reason
                     print(
                         f"OPUS_AUTO_PAUSED source_id={candidate.source_id} reason={paused_reason}"
