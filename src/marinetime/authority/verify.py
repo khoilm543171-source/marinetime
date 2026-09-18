@@ -330,3 +330,136 @@ def finding_to_json(finding: AuthorityFinding) -> dict[str, Any]:
             "ALU verification_status or grant operational permission."
         ),
     }
+
+
+def build_authority_review(
+    *,
+    topic_id: str,
+    targets: Iterable[dict[str, Any]],
+) -> dict[str, Any]:
+    if topic_id != "passage-planning":
+        raise AuthorityVerificationError(f"UNSUPPORTED_AUTHORITY_TOPIC:{topic_id}")
+
+    findings: list[dict[str, Any]] = []
+    for index, target in enumerate(targets):
+        if not isinstance(target, dict):
+            raise AuthorityVerificationError(f"AUTHORITY_TARGET_{index}_NOT_OBJECT")
+        source_id = target.get("source_id")
+        alu_id = target.get("alu_id")
+        statement = target.get("statement")
+        if not isinstance(source_id, str) or not source_id.strip():
+            raise AuthorityVerificationError(f"AUTHORITY_TARGET_{index}_MISSING_SOURCE_ID")
+        if not isinstance(alu_id, str) or not alu_id.strip():
+            raise AuthorityVerificationError(f"AUTHORITY_TARGET_{index}_MISSING_ALU_ID")
+        if not isinstance(statement, str) or not statement.strip():
+            raise AuthorityVerificationError(f"AUTHORITY_TARGET_{index}_MISSING_STATEMENT")
+
+        finding = classify_passage_planning_claim(
+            alu_id=alu_id.strip(),
+            source_id=source_id.strip(),
+            statement=statement,
+        )
+        findings.append(finding_to_json(finding))
+
+    counts = {
+        SUPPORT_DIRECT: 0,
+        SUPPORT_PARTIAL: 0,
+        SUPPORT_NOT_APPLICABLE: 0,
+        SUPPORT_UNRESOLVED: 0,
+    }
+    for finding in findings:
+        status = finding["support_status"]
+        counts[status] = counts.get(status, 0) + 1
+
+    return {
+        "schema_version": "1.0",
+        "artifact_type": "authority_review",
+        "topic_id": topic_id,
+        "verification_method": "curated_official_source_rules_v1",
+        "authority_sources": [
+            {
+                "source_id": source.source_id,
+                "organization": source.organization,
+                "title": source.title,
+                "source_type": source.source_type,
+                "url": source.url,
+                "published_or_adopted": source.published_or_adopted,
+                "notes": source.notes,
+            }
+            for source in PASSAGE_PLANNING_AUTHORITY_SOURCES
+        ],
+        "findings": findings,
+        "counts": counts,
+        "promotion_note": (
+            "This review does not mutate ALU verification_status, rendering_scope, "
+            "or operational eligibility. Promotion requires a separate deterministic gate."
+        ),
+    }
+
+
+def render_authority_review(review: dict[str, Any]) -> str:
+    if review.get("artifact_type") != "authority_review":
+        raise AuthorityVerificationError("INVALID_AUTHORITY_REVIEW_ARTIFACT")
+
+    counts = review.get("counts") or {}
+    lines: list[str] = [
+        "# Passage Planning — Authority Review",
+        "",
+        f"- **Method:** {review.get('verification_method')}",
+        f"- **Direct support:** {counts.get(SUPPORT_DIRECT, 0)}",
+        f"- **Partial support:** {counts.get(SUPPORT_PARTIAL, 0)}",
+        f"- **Not applicable:** {counts.get(SUPPORT_NOT_APPLICABLE, 0)}",
+        f"- **Unresolved:** {counts.get(SUPPORT_UNRESOLVED, 0)}",
+        "",
+        "> Authority support does not automatically grant operational permission.",
+        "",
+        "## Official sources",
+        "",
+    ]
+    for source in review.get("authority_sources") or []:
+        lines.extend(
+            [
+                f"### {source['source_id']} — {source['title']}",
+                "",
+                f"- Organization: {source['organization']}",
+                f"- Type: {source['source_type']}",
+                f"- URL: {source['url']}",
+                "",
+            ]
+        )
+
+    lines.extend(["## Findings", ""])
+    for finding in review.get("findings") or []:
+        lines.extend(
+            [
+                f"### {finding['source_id']} / {finding['alu_id']}",
+                "",
+                f"**Source claim:** {finding['statement']}",
+                "",
+                f"- **Authority support:** {finding['support_status']}",
+                f"- **Why:** {finding['rationale']}",
+            ]
+        )
+        refs = finding.get("authority_refs") or []
+        if refs:
+            lines.append("- **Official support:**")
+            for ref in refs:
+                lines.append(
+                    f"  - {ref['authority_source_id']} · {ref['locator']} — "
+                    f"{ref['support_summary']}"
+                )
+        else:
+            lines.append("- **Official support:** none attached by this rule.")
+        lines.append("")
+
+    lines.extend(
+        [
+            "## Gate status",
+            "",
+            "- Original ALUs remain unchanged.",
+            "- Creator statements remain creator statements.",
+            "- Direct/partial official support may be used by the next Instructional Designer stage, but not as automatic operational authorization.",
+            "",
+        ]
+    )
+    return "\n".join(lines)
