@@ -83,3 +83,14 @@ Rules:
 - Test/log isolation is a valid use case because high-volume output can stay outside the main context.
 - Parallel subagents are allowed only for independent workstreams with no shared writable files.
 - Any editing subagent must use an isolated worktree once parallel editing is introduced.
+
+
+## 11. Source organization and creator identity
+- Content hash + stable `source_id` are canonical source identity. Moving or renaming a file must not trigger reprocessing.
+- Creator is metadata, never the canonical identity of a source.
+- Resolve creator in this order: platform uploader/channel IDs, uploader/channel aliases, filename prefix aliases, OCR candidate, then UNKNOWN.
+- OCR-only creator matches are candidates and must not be silently promoted to deterministic creator identity.
+- Ambiguous matches resolve to UNKNOWN rather than guessing.
+- Keep canonical local evidence storage source-id based.
+- Human-facing Drive/viewer organization may group sources by creator without moving or rewriting canonical evidence.
+- Creator and topic are separate catalog dimensions; one source may have one creator and multiple topics.
