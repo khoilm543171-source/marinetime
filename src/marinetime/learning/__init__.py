@@ -36,3 +36,15 @@ from .topic_lesson import (
     validate_topic_lesson,
     write_topic_lesson_artifacts,
 )
+
+from .mastery import (
+    AssessmentResult,
+    MasteryStateError,
+    apply_assessment_result,
+    build_initial_learner_state,
+    build_practice_session,
+    due_concepts,
+    normalize_assessment_result,
+    render_mastery_state,
+    write_json_atomic,
+)
