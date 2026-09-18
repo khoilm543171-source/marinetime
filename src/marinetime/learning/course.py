@@ -158,6 +158,17 @@ _TRACKS = (
     ),
 )
 
+_TRACK_PRIORITY = {
+    "engine-machinery": 0,
+    "watchkeeping-operations": 1,
+    "safety-regulation": 2,
+    "technical-english": 3,
+    "career-practical": 4,
+    "navigation": 5,
+    "general-marine": 6,
+}
+
+
 _MODULES: dict[str, tuple[tuple[str, str, str, tuple[str, ...]], ...]] = {
     "safety-regulation": (
         (
@@ -342,9 +353,21 @@ def classify_course_track(blueprint: LessonBlueprint) -> tuple[str, str]:
             ]
         )
     )
+    scored: list[tuple[int, int, str, str]] = []
     for track_id, track_title, keywords in _TRACKS:
-        if any(keyword in haystack for keyword in keywords):
-            return track_id, track_title
+        hits = sum(1 for keyword in keywords if keyword in haystack)
+        if hits:
+            scored.append(
+                (
+                    hits,
+                    -_TRACK_PRIORITY.get(track_id, 99),
+                    track_id,
+                    track_title,
+                )
+            )
+    if scored:
+        _, _, track_id, track_title = max(scored)
+        return track_id, track_title
     return "general-marine", "Kiến thức hàng hải tổng hợp / General Marine Knowledge"
 
 
@@ -365,9 +388,16 @@ def classify_course_module(
             ]
         )
     )
-    for module_id, title, description, keywords in _MODULES.get(track_id, ()):
-        if any(keyword in haystack for keyword in keywords):
-            return module_id, title, description
+    scored: list[tuple[int, int, str, str, str]] = []
+    for order, (module_id, title, description, keywords) in enumerate(
+        _MODULES.get(track_id, ())
+    ):
+        hits = sum(1 for keyword in keywords if keyword in haystack)
+        if hits:
+            scored.append((hits, -order, module_id, title, description))
+    if scored:
+        _, _, module_id, title, description = max(scored)
+        return module_id, title, description
     return (
         f"{track_id}-foundations",
         "Nền tảng / Foundations",
@@ -427,13 +457,16 @@ def build_learning_course(
 
     lessons.sort(
         key=lambda item: (
+            _TRACK_PRIORITY.get(item.track_id, 99),
             next(
                 (
                     index
-                    for index, (track_id, _, _) in enumerate(_TRACKS)
-                    if track_id == item.track_id
+                    for index, (module_id, _, _, _) in enumerate(
+                        _MODULES.get(item.track_id, ())
+                    )
+                    if module_id == item.module_id
                 ),
-                len(_TRACKS),
+                99,
             ),
             item.display_title.lower(),
             item.source_id,
