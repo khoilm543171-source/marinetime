@@ -88,9 +88,10 @@ Rules:
 ## 11. Source organization and creator identity
 - Content hash + stable `source_id` are canonical source identity. Moving or renaming a file must not trigger reprocessing.
 - Creator is metadata, never the canonical identity of a source.
-- Resolve creator in this order: platform uploader/channel IDs, uploader/channel aliases, filename prefix aliases, OCR candidate, then UNKNOWN.
+- Resolve creator in this order: explicit user/import-batch creator metadata, platform uploader/channel IDs, uploader/channel aliases, filename prefix aliases, OCR candidate, then UNKNOWN.
 - OCR-only creator matches are candidates and must not be silently promoted to deterministic creator identity.
 - Ambiguous matches resolve to UNKNOWN rather than guessing.
 - Keep canonical local evidence storage source-id based.
 - Human-facing Drive/viewer organization may group sources by creator without moving or rewriting canonical evidence.
 - Creator and topic are separate catalog dimensions; one source may have one creator and multiple topics.
+- Re-discovering the same content hash may backfill missing creator/import-batch metadata, but must never overwrite a conflicting existing creator identity.
