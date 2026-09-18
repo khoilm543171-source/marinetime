@@ -171,5 +171,25 @@ class LocalPreprocessTests(unittest.TestCase):
         mocked_png.assert_not_called()
 
 
+    @patch("marinetime.pilot.local_preprocess.extract_frame_png")
+    @patch("marinetime.pilot.local_preprocess.extract_frame_jpeg")
+    def test_frame_extraction_falls_back_when_jpeg_returns_no_frame(
+        self,
+        mocked_jpeg,
+        mocked_png,
+    ) -> None:
+        mocked_jpeg.side_effect = LocalPreprocessError("FRAME_OUTPUT_MISSING")
+        mocked_png.return_value = Path("frame_001.png")
+
+        result = extract_frame_image(
+            "video.mp4",
+            "frames/frame_001",
+            timestamp_ms=1000,
+        )
+
+        self.assertEqual(result, Path("frame_001.png"))
+        mocked_png.assert_called_once()
+
+
 if __name__ == "__main__":
     unittest.main()
