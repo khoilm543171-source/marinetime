@@ -1,0 +1,18 @@
+{
+  "schema_version": "1.0",
+  "creators": [
+    {
+      "creator_id": "nguyen-chi-hieu",
+      "display_name": "Nguyễn Chí Hiếu",
+      "aliases": [
+        "Nguyễn Chí Hiếu",
+        "Nguyen Chi Hieu",
+        "Nguyen Chi Hieu Official",
+        "@nguyenchihieuofficialtv"
+      ],
+      "platform_ids": {
+        "youtube": ["@nguyenchihieuofficialtv"]
+      }
+    }
+  ]
+}
