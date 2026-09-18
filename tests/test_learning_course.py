@@ -98,8 +98,11 @@ class LearningCourseTests(unittest.TestCase):
         self.assertEqual(payload["sources_without_lesson"], ["RAW-002"])
         self.assertEqual(payload["missing_alu_sources"], ["RAW-003"])
         self.assertIn("RAW-003", markdown)
-        self.assertIn("not silently substituted", markdown)
+        self.assertIn("chưa có ALU, nên chưa tạo lesson", markdown)
+        self.assertIn("## Bắt đầu ở đây", markdown)
+        self.assertIn("Tiếng Việt dùng để giải thích", markdown)
         self.assertIn("Seen → Understood → Recalled → Explained → Applied → Retained", markdown)
+        self.assertIn("LESSON.md", payload["tracks"][0]["lessons"][0]["lesson_path"])
 
 
 if __name__ == "__main__":
