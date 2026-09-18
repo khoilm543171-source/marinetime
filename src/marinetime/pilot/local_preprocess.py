@@ -4,7 +4,7 @@ import json
 import math
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Callable, Iterable
 
 from marinetime.pilot.media import MediaToolError, extract_asr_wav, probe_video
 from marinetime.pipeline.evidence_pack import validate_evidence_pack
@@ -26,6 +26,67 @@ class SceneWindow:
     @property
     def midpoint_ms(self) -> int:
         return self.start_ms + max(0, self.end_ms - self.start_ms) // 2
+
+
+@dataclass
+class LocalModelRuntime:
+    """Lazily load local ML engines once and reuse them across a worker process."""
+
+    whisper_model: str
+    language: str | None = None
+    ocr_lang: str = "en"
+    device: str = "cpu"
+    compute_type: str | None = None
+    ocr_version: str = "PP-OCRv6"
+    enable_mkldnn: bool = False
+    whisper_factory: Callable[..., Any] | None = None
+    ocr_factory: Callable[..., Any] | None = None
+    _whisper_engine: Any | None = None
+    _ocr_engine: Any | None = None
+
+    def _get_whisper_engine(self) -> Any:
+        if self._whisper_engine is None:
+            factory = self.whisper_factory or create_whisperx_model
+            self._whisper_engine = factory(
+                model_name=self.whisper_model,
+                language=self.language,
+                device=self.device,
+                compute_type=self.compute_type,
+            )
+        return self._whisper_engine
+
+    def _get_ocr_engine(self) -> Any:
+        if self._ocr_engine is None:
+            factory = self.ocr_factory or create_paddle_ocr
+            self._ocr_engine = factory(
+                lang=self.ocr_lang,
+                ocr_version=self.ocr_version,
+                device="cpu",
+                enable_mkldnn=self.enable_mkldnn,
+            )
+        return self._ocr_engine
+
+    def transcribe(self, audio_path: str | Path, *, batch_size: int = 4) -> list[dict[str, Any]]:
+        return transcribe_whisperx(
+            audio_path,
+            model_name=self.whisper_model,
+            language=self.language,
+            device=self.device,
+            compute_type=self.compute_type,
+            batch_size=batch_size,
+            whisper_engine=self._get_whisper_engine(),
+        )
+
+    def ocr(self, frame_path: str | Path, *, min_score: float = 0.0) -> list[dict[str, Any]]:
+        return ocr_frame_paddle(
+            frame_path,
+            lang=self.ocr_lang,
+            ocr_version=self.ocr_version,
+            min_score=min_score,
+            device="cpu",
+            enable_mkldnn=self.enable_mkldnn,
+            ocr_engine=self._get_ocr_engine(),
+        )
 
 
 def _seconds_to_ms(value: Any) -> int:
@@ -95,6 +156,37 @@ def detect_scenes(video_path: str | Path, *, threshold: float = 27.0) -> list[Sc
     return scenes
 
 
+def create_whisperx_model(
+    *,
+    model_name: str,
+    language: str | None = None,
+    device: str = "cpu",
+    compute_type: str | None = None,
+) -> Any:
+    """Create one reusable WhisperX model without transcribing any source."""
+    if not model_name.strip():
+        raise LocalPreprocessError("WHISPER_MODEL_REQUIRED")
+    try:
+        import whisperx
+    except ImportError as exc:
+        raise LocalPreprocessError("WHISPERX_NOT_INSTALLED") from exc
+
+    resolved_compute_type = compute_type or ("float16" if device == "cuda" else "int8")
+    try:
+        return whisperx.load_model(
+            model_name,
+            device,
+            compute_type=resolved_compute_type,
+            language=language,
+        )
+    except Exception as exc:
+        detail = " ".join(str(exc).split())[:300]
+        suffix = f":{detail}" if detail else ""
+        raise LocalPreprocessError(
+            f"WHISPERX_MODEL_LOAD_FAILED:{type(exc).__name__}{suffix}"
+        ) from exc
+
+
 def transcribe_whisperx(
     audio_path: str | Path,
     *,
@@ -103,6 +195,7 @@ def transcribe_whisperx(
     device: str = "cpu",
     compute_type: str | None = None,
     batch_size: int = 4,
+    whisper_engine: Any | None = None,
 ) -> list[dict[str, Any]]:
     """Run one local WhisperX ASR pass and normalize segment-level evidence."""
     source = Path(audio_path)
@@ -122,11 +215,11 @@ def transcribe_whisperx(
         compute_type = "float16" if device == "cuda" else "int8"
 
     try:
-        model = whisperx.load_model(
-            model_name,
-            device,
-            compute_type=compute_type,
+        model = whisper_engine or create_whisperx_model(
+            model_name=model_name,
             language=language,
+            device=device,
+            compute_type=compute_type,
         )
         audio = whisperx.load_audio(str(source))
         result = model.transcribe(audio, batch_size=batch_size)
@@ -213,6 +306,37 @@ def _coerce_paddle_payload(result: Any) -> dict[str, Any] | None:
     return nested if isinstance(nested, dict) else payload
 
 
+def create_paddle_ocr(
+    *,
+    lang: str = "en",
+    ocr_version: str = "PP-OCRv6",
+    device: str = "cpu",
+    enable_mkldnn: bool = False,
+) -> Any:
+    """Create one reusable PaddleOCR engine."""
+    try:
+        from paddleocr import PaddleOCR
+    except ImportError as exc:
+        raise LocalPreprocessError("PADDLEOCR_NOT_INSTALLED") from exc
+
+    try:
+        return PaddleOCR(
+            lang=lang,
+            ocr_version=ocr_version,
+            use_doc_orientation_classify=False,
+            use_doc_unwarping=False,
+            use_textline_orientation=False,
+            device=device,
+            enable_mkldnn=enable_mkldnn,
+        )
+    except Exception as exc:
+        detail = " ".join(str(exc).split())[:300]
+        suffix = f":{detail}" if detail else ""
+        raise LocalPreprocessError(
+            f"PADDLEOCR_MODEL_LOAD_FAILED:{type(exc).__name__}{suffix}"
+        ) from exc
+
+
 def ocr_frame_paddle(
     frame_path: str | Path,
     *,
@@ -221,6 +345,7 @@ def ocr_frame_paddle(
     min_score: float = 0.0,
     device: str = "cpu",
     enable_mkldnn: bool = False,
+    ocr_engine: Any | None = None,
 ) -> list[dict[str, Any]]:
     """Run local PaddleOCR while preserving source text exactly.
 
@@ -232,17 +357,9 @@ def ocr_frame_paddle(
     if not source.is_file():
         raise LocalPreprocessError("FRAME_FILE_NOT_FOUND")
     try:
-        from paddleocr import PaddleOCR
-    except ImportError as exc:
-        raise LocalPreprocessError("PADDLEOCR_NOT_INSTALLED") from exc
-
-    try:
-        ocr = PaddleOCR(
+        ocr = ocr_engine or create_paddle_ocr(
             lang=lang,
             ocr_version=ocr_version,
-            use_doc_orientation_classify=False,
-            use_doc_unwarping=False,
-            use_textline_orientation=False,
             device=device,
             enable_mkldnn=enable_mkldnn,
         )
@@ -332,6 +449,7 @@ def preprocess_local_video(
     ocr_lang: str = "en",
     max_frames: int = 8,
     device: str = "cpu",
+    runtime: LocalModelRuntime | None = None,
 ) -> dict[str, Any]:
     """Run the first local raw-video pilot pass and persist traceable artifacts."""
     video = Path(video_path)
@@ -347,12 +465,15 @@ def preprocess_local_video(
     )
     probe = probe_video(video)
     audio_path = extract_asr_wav(video, root / "audio.wav")
-    transcript = transcribe_whisperx(
-        audio_path,
-        model_name=whisper_model,
-        language=language,
-        device=device,
-    )
+    if runtime is None:
+        transcript = transcribe_whisperx(
+            audio_path,
+            model_name=whisper_model,
+            language=language,
+            device=device,
+        )
+    else:
+        transcript = runtime.transcribe(audio_path)
 
     scenes = detect_scenes(video)
     timestamps = select_keyframe_timestamps(
@@ -375,7 +496,17 @@ def preprocess_local_video(
             "artifact_path": relative_path,
             "content_hash": f"sha256:{sha256_file(frame_path)}",
         })
-        for hit in ocr_frame_paddle(frame_path, lang=ocr_lang, device="cpu", enable_mkldnn=False):
+        ocr_hits = (
+            runtime.ocr(frame_path)
+            if runtime is not None
+            else ocr_frame_paddle(
+                frame_path,
+                lang=ocr_lang,
+                device="cpu",
+                enable_mkldnn=False,
+            )
+        )
+        for hit in ocr_hits:
             ocr_records.append({
                 "timestamp_ms": timestamp_ms,
                 "text": hit["text"],
