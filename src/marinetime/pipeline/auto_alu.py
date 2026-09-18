@@ -20,7 +20,7 @@ from marinetime.llm.usage import load_usage_totals
 from marinetime.pipeline.alu_extract import (
     ALUExtractionError,
     ALUExtractionResult,
-    build_semantic_evidence_view,
+    build_bounded_semantic_evidence_view,
     extract_alus,
 )
 from marinetime.pipeline.evidence_pack import EvidencePackError, validate_evidence_pack
@@ -44,6 +44,7 @@ class AutoALURunResult:
     waiting_after: int
     triggered: bool
     paused_reason: str | None = None
+    skipped: int = 0
 
 
 def _load_json_object(path: Path) -> dict[str, Any]:
@@ -158,10 +159,17 @@ def _preflight_candidate(
     repo_root: Path,
     usage_log_path: Path,
     limits: TokenLimits,
-) -> tuple[int, int, int]:
-    semantic_view = build_semantic_evidence_view(evidence_pack)
-    dynamic_input = json.dumps(semantic_view, ensure_ascii=False, separators=(",", ":"))
+) -> tuple[int, int, int, dict[str, Any], bool]:
     spec, system_prompt = load_prompt("alu_extract", repo_root=repo_root)
+    max_dynamic_chars = max(
+        1,
+        (limits.max_input_tokens_per_call * 2) - len(system_prompt) - 2,
+    )
+    semantic_view, compacted = build_bounded_semantic_evidence_view(
+        evidence_pack,
+        max_dynamic_chars=max_dynamic_chars,
+    )
+    dynamic_input = json.dumps(semantic_view, ensure_ascii=False, separators=(",", ":"))
     estimated_input = conservative_text_token_estimate(system_prompt + "\n" + dynamic_input)
     totals = load_usage_totals(usage_log_path, video_id=source_id)
     projected = estimated_input + spec.default_max_output_tokens
@@ -184,7 +192,13 @@ def _preflight_candidate(
         current_daily_tokens=totals.daily_tokens,
         limits=limits,
     )
-    return estimated_input, spec.default_max_output_tokens, totals.daily_tokens
+    return (
+        estimated_input,
+        spec.default_max_output_tokens,
+        totals.daily_tokens,
+        semantic_view,
+        compacted,
+    )
 
 
 def run_auto_alu_threshold(
@@ -194,6 +208,7 @@ def run_auto_alu_threshold(
     usage_log_path: str | Path,
     threshold: int = 20,
     limits: TokenLimits = TokenLimits(),
+    drain: bool = False,
 ) -> AutoALURunResult:
     """Automatically extract ALUs once a full threshold-sized backlog exists.
 
@@ -206,7 +221,7 @@ def run_auto_alu_threshold(
     repo = Path(repo_root)
     ledger = Path(usage_log_path)
     candidates = discover_auto_alu_candidates(root)
-    selected = select_threshold_batch(candidates, threshold=threshold)
+    selected = list(candidates) if drain else select_threshold_batch(candidates, threshold=threshold)
 
     if not selected:
         print("OPUS_AUTO_WAITING")
@@ -228,11 +243,15 @@ def run_auto_alu_threshold(
     print(f"threshold={threshold}")
     print(f"selected={len(selected)}")
     print("OPUS_NOTICE provider_quota_will_be_used=true")
-    print("OPUS_NOTICE mode=automatic_threshold_batch")
+    print(
+        "OPUS_NOTICE mode="
+        + ("manual_backlog_drain" if drain else "automatic_threshold_batch")
+    )
 
     attempted = 0
     succeeded = 0
     failed = 0
+    skipped = 0
     paused_reason: str | None = None
 
     try:
@@ -256,7 +275,13 @@ def run_auto_alu_threshold(
             try:
                 evidence_pack = _load_json_object(candidate.evidence_path)
                 validate_evidence_pack(evidence_pack)
-                estimated_input, requested_output, daily_before = _preflight_candidate(
+                (
+                    estimated_input,
+                    requested_output,
+                    daily_before,
+                    semantic_view,
+                    compacted,
+                ) = _preflight_candidate(
                     evidence_pack=evidence_pack,
                     source_id=candidate.source_id,
                     repo_root=repo,
@@ -264,12 +289,31 @@ def run_auto_alu_threshold(
                     limits=limits,
                 )
             except TokenBudgetBlocked as exc:
-                paused_reason = str(exc)
+                reason = str(exc)
+                if reason in {
+                    "MARINETIME_DAILY_HARD_STOP",
+                    "MARINETIME_CLOSEOUT_MODE",
+                    "MARINETIME_CLOSEOUT_WOULD_BE_REACHED",
+                    "MAX_DAILY_TOKENS",
+                    "MAX_OUTPUT_TOKENS_PER_CALL",
+                }:
+                    paused_reason = reason
+                    print(
+                        f"OPUS_AUTO_PAUSED source_id={candidate.source_id} reason={paused_reason}"
+                    )
+                    break
+                skipped += 1
                 print(
-                    f"OPUS_AUTO_PAUSED source_id={candidate.source_id} reason={paused_reason}"
+                    f"OPUS_AUTO_SKIPPED source_id={candidate.source_id} reason={reason}"
                 )
-                break
-            except (OSError, ValueError, json.JSONDecodeError, EvidencePackError) as exc:
+                continue
+            except (
+                OSError,
+                ValueError,
+                json.JSONDecodeError,
+                EvidencePackError,
+                ALUExtractionError,
+            ) as exc:
                 failed += 1
                 print(
                     f"OPUS_AUTO_FAILED source_id={candidate.source_id} "
@@ -280,7 +324,7 @@ def run_auto_alu_threshold(
             print(
                 f"OPUS_AUTO_START index={index}/{len(selected)} source_id={candidate.source_id} "
                 f"estimated_input_tokens={estimated_input} requested_output_tokens={requested_output} "
-                f"daily_tokens_before={daily_before}"
+                f"daily_tokens_before={daily_before} compacted={str(compacted).lower()}"
             )
             attempted += 1
             try:
@@ -289,14 +333,33 @@ def run_auto_alu_threshold(
                     evidence_pack=evidence_pack,
                     repo_root=repo,
                     usage_log_path=ledger,
+                    semantic_view=semantic_view,
                 )
                 artifact = _build_output(result, evidence_pack)
                 _write_json_atomic(candidate.output_path, artifact)
+            except TokenBudgetBlocked as exc:
+                reason = str(exc)
+                if reason in {
+                    "MARINETIME_DAILY_HARD_STOP",
+                    "MARINETIME_CLOSEOUT_MODE",
+                    "MARINETIME_CLOSEOUT_WOULD_BE_REACHED",
+                    "MAX_DAILY_TOKENS",
+                    "MAX_OUTPUT_TOKENS_PER_CALL",
+                }:
+                    paused_reason = reason
+                    print(
+                        f"OPUS_AUTO_PAUSED source_id={candidate.source_id} reason={paused_reason}"
+                    )
+                    break
+                skipped += 1
+                print(
+                    f"OPUS_AUTO_SKIPPED source_id={candidate.source_id} reason={reason}"
+                )
+                continue
             except (
                 ValueError,
                 TypeError,
                 ClaudeAPIError,
-                TokenBudgetBlocked,
                 EvidencePackError,
                 ALUExtractionError,
             ) as exc:
@@ -319,6 +382,7 @@ def run_auto_alu_threshold(
     print(f"attempted={attempted}")
     print(f"succeeded={succeeded}")
     print(f"failed={failed}")
+    print(f"skipped={skipped}")
     print(f"waiting_after={remaining}")
     if paused_reason:
         print(f"paused_reason={paused_reason}")
@@ -332,4 +396,5 @@ def run_auto_alu_threshold(
         waiting_after=remaining,
         triggered=True,
         paused_reason=paused_reason,
+        skipped=skipped,
     )
