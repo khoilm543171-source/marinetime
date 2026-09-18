@@ -10,7 +10,10 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from marinetime.pipeline.auto_alu import run_auto_alu_threshold  # noqa: E402
-from marinetime.pilot.local_preprocess import preprocess_local_video  # noqa: E402
+from marinetime.pilot.local_preprocess import (  # noqa: E402
+    LocalModelRuntime,
+    preprocess_local_video,
+)
 from marinetime.pilot.preflight import check_local_stack  # noqa: E402
 from marinetime.pilot.queue import (  # noqa: E402
     FAILED_PREPROCESS,
@@ -98,6 +101,16 @@ def main() -> int:
         count = requeue_failed_jobs(args.db)
         print(f"QUEUE_REQUEUED_FAILED count={count}")
 
+    runtime = LocalModelRuntime(
+        whisper_model=args.whisper_model,
+        language=args.language,
+        ocr_lang=args.ocr_lang,
+        device=args.device,
+        enable_mkldnn=False,
+    )
+    print("LOCAL_MODEL_RUNTIME reuse_across_jobs=true")
+    print(f"LOCAL_MODEL_RUNTIME whisper_model={args.whisper_model} ocr_lang={args.ocr_lang}")
+
     def processor(job: QueueJob, output_dir: Path) -> object:
         print(
             f"QUEUE_JOB_START source_id={job.source_id} file={job.video_path.name}",
@@ -123,6 +136,7 @@ def main() -> int:
                     ocr_lang=args.ocr_lang,
                     max_frames=args.max_frames,
                     device=args.device,
+                    runtime=runtime,
                 )
             except Exception as exc:
                 print(

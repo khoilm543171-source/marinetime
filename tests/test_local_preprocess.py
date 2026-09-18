@@ -8,6 +8,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from marinetime.pilot.local_preprocess import (
+    LocalModelRuntime,
     LocalPreprocessError,
     SceneWindow,
     _coerce_paddle_payload,
@@ -83,6 +84,35 @@ class LocalPreprocessTests(unittest.TestCase):
             ocr_records=[{"timestamp_ms": 100, "text": uncertain, "score": 0.42}],
         )
         self.assertEqual(pack["ocr_hits"][0]["text"], uncertain)
+
+
+    def test_local_model_runtime_reuses_each_engine_once(self) -> None:
+        calls = {"whisper": 0, "ocr": 0}
+        whisper_engine = object()
+        ocr_engine = object()
+
+        def whisper_factory(**kwargs):
+            calls["whisper"] += 1
+            self.assertEqual(kwargs["model_name"], "small")
+            return whisper_engine
+
+        def ocr_factory(**kwargs):
+            calls["ocr"] += 1
+            self.assertEqual(kwargs["lang"], "en")
+            return ocr_engine
+
+        runtime = LocalModelRuntime(
+            whisper_model="small",
+            ocr_lang="en",
+            whisper_factory=whisper_factory,
+            ocr_factory=ocr_factory,
+        )
+
+        self.assertIs(runtime._get_whisper_engine(), whisper_engine)
+        self.assertIs(runtime._get_whisper_engine(), whisper_engine)
+        self.assertIs(runtime._get_ocr_engine(), ocr_engine)
+        self.assertIs(runtime._get_ocr_engine(), ocr_engine)
+        self.assertEqual(calls, {"whisper": 1, "ocr": 1})
 
 
 if __name__ == "__main__":

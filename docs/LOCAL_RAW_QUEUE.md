@@ -59,7 +59,7 @@ ALU completion is represented by `storage/evidence/<SOURCE_ID>/alus.json`. Sourc
 python scripts\run_local_queue.py
 ```
 
-The worker processes pending videos sequentially. A failed video is recorded as failed, reported immediately in the terminal, and does not prevent later pending videos from running. A final failure summary is printed at the end.
+The worker processes pending videos sequentially. WhisperX and PaddleOCR are loaded lazily once per worker process and reused across jobs, avoiding repeated model initialization during large batches. A failed video is recorded as failed, reported immediately in the terminal, and does not prevent later pending videos from running. A final failure summary is printed at the end.
 
 After local processing, the worker automatically evaluates the 20-video Opus threshold.
 
