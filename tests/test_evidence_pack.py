@@ -93,5 +93,46 @@ class EvidencePackTests(unittest.TestCase):
             validate_evidence_pack(pack)
 
 
+    def test_accepts_honest_frame_timestamp_fallback_metadata(self):
+        pack = base_pack()
+        pack["frames"][0].update(
+            {
+                "timestamp_ms": 0,
+                "requested_timestamp_ms": 15000,
+                "timestamp_fallback_reason": "NO_FRAME_AT_REQUESTED_TIMESTAMP",
+            }
+        )
+        validate_evidence_pack(pack)
+
+    def test_rejects_timestamp_change_without_fallback_reason(self):
+        pack = base_pack()
+        pack["frames"][0].update(
+            {
+                "timestamp_ms": 0,
+                "requested_timestamp_ms": 15000,
+            }
+        )
+        with self.assertRaisesRegex(
+            EvidencePackError,
+            "TIMESTAMP_CHANGED_WITHOUT_FALLBACK_REASON",
+        ):
+            validate_evidence_pack(pack)
+
+    def test_rejects_invalid_frame_fallback_reason(self):
+        pack = base_pack()
+        pack["frames"][0].update(
+            {
+                "timestamp_ms": 0,
+                "requested_timestamp_ms": 15000,
+                "timestamp_fallback_reason": "GUESSED_FRAME",
+            }
+        )
+        with self.assertRaisesRegex(
+            EvidencePackError,
+            "INVALID_TIMESTAMP_FALLBACK_REASON",
+        ):
+            validate_evidence_pack(pack)
+
+
 if __name__ == "__main__":
     unittest.main()
