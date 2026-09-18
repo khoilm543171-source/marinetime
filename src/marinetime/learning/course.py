@@ -19,6 +19,9 @@ class CourseLesson:
     display_title: str
     track_id: str
     track_title: str
+    module_id: str
+    module_title: str
+    module_description: str
     lesson_path: str
     learning_objectives: int
     retrieval_questions: int
@@ -155,6 +158,171 @@ _TRACKS = (
     ),
 )
 
+_MODULES: dict[str, tuple[tuple[str, str, str, tuple[str, ...]], ...]] = {
+    "safety-regulation": (
+        (
+            "safety-frameworks",
+            "Nền tảng quy định an toàn / Safety frameworks",
+            "Hiểu SOLAS, MARPOL, STCW, ISM và cách chúng xuất hiện trong công việc trên tàu.",
+            ("solas", "marpol", "stcw", "ism", "port state", "psc"),
+        ),
+        (
+            "fire-emergency",
+            "Cháy & Ứng phó sự cố / Fire & Emergency",
+            "Học mục đích, vai trò và tư duy an toàn trong fire/emergency/drill.",
+            ("fire", "emergency", "drill", "lifeboat", "muster"),
+        ),
+        (
+            "enclosed-space-work-control",
+            "Không gian kín & Kiểm soát công việc / Enclosed Space & Work Control",
+            "Nhận diện rủi ro, permit và ranh giới giữa kiến thức học với thao tác thực tế.",
+            ("enclosed space", "permit to work", "gas test", "risk assessment"),
+        ),
+        (
+            "pollution-prevention",
+            "Ngăn ngừa ô nhiễm / Pollution Prevention",
+            "Hiểu các ý nguồn đề cập về pollution prevention và MARPOL mà không suy rộng quá evidence.",
+            ("pollution", "oil record", "garbage", "sewage"),
+        ),
+    ),
+    "navigation": (
+        (
+            "passage-planning",
+            "Passage Planning",
+            "Từ Appraisal đến Monitoring: hiểu logic, thuật ngữ English và cách trả lời phỏng vấn.",
+            ("passage planning", "appraisal", "execution", "monitoring", "voyage", "route"),
+        ),
+        (
+            "positioning",
+            "Xác định vị trí & Cross-check / Position Fixing",
+            "Hiểu position fixing, radar/visual cross-check và tư duy redundancy theo đúng nguồn.",
+            ("position fixing", "position-fixing", "gps", "cross-check", "radar"),
+        ),
+        (
+            "ecdis-charts",
+            "ECDIS & Charts",
+            "Học thuật ngữ và ý chính liên quan ECDIS, ENC, chart và cập nhật hải đồ.",
+            ("ecdis", "enc", "chart"),
+        ),
+        (
+            "collision-communication",
+            "COLREG & Bridge Communication",
+            "Ôn các ý về tránh va, COLREG và communication/VHF ở mức nguồn hỗ trợ.",
+            ("colreg", "collision", "vhf", "communication"),
+        ),
+    ),
+    "engine-machinery": (
+        (
+            "pumps-piping",
+            "Bơm, Van & Đường ống / Pumps, Valves & Piping",
+            "Hiểu chức năng thiết bị và quan hệ trong hệ thống trước khi học troubleshooting.",
+            ("pump", "valve", "piping", "pipeline"),
+        ),
+        (
+            "fuel-lube-purification",
+            "Fuel, Lube & Purification",
+            "Học fuel oil, lube oil, purifier/separator và các ý vận hành được source hỗ trợ.",
+            ("fuel oil", "lube oil", "lubricating", "purifier", "separator"),
+        ),
+        (
+            "air-compressors",
+            "Khí nén / Air Compressors",
+            "Hiểu chức năng và dấu hiệu vận hành của hệ thống khí nén theo evidence.",
+            ("compressor", "compressed air", "air bottle"),
+        ),
+        (
+            "boilers-steam",
+            "Nồi hơi & Hơi / Boilers & Steam",
+            "Học quan hệ water–steam–combustion và thuật ngữ boiler ở mức nguồn hỗ trợ.",
+            ("boiler", "steam"),
+        ),
+        (
+            "generators-electrical",
+            "Máy phát & Điện / Generators & Electrical",
+            "Hiểu các ý về generator, tải và hệ thống điện được video/source đề cập.",
+            ("generator", "electrical", "electric", "alternator"),
+        ),
+        (
+            "main-engine",
+            "Động cơ chính / Main Engine",
+            "Học piston, crankshaft, scavenge, turbocharger và các quan hệ cơ bản của diesel engine.",
+            ("diesel", "piston", "crankshaft", "scavenge", "turbocharger", "bearing"),
+        ),
+        (
+            "cooling-lubrication",
+            "Làm mát & Bôi trơn / Cooling & Lubrication",
+            "Học flow, chức năng và dấu hiệu liên quan cooling/lubrication theo đúng source.",
+            ("cooling", "cooling water", "lubrication", "lubricating"),
+        ),
+    ),
+    "watchkeeping-operations": (
+        (
+            "watch-handover",
+            "Trực ca & Bàn giao / Watchkeeping & Handover",
+            "Hiểu điều cần nắm, điều cần truyền lại và cách suy nghĩ khi nhận/bàn giao ca.",
+            ("watchkeeping", "watch keeping", "handover", "hand over"),
+        ),
+        (
+            "bunkering",
+            "Bunkering",
+            "Học mục đích, kiểm soát và trình tự ở mức kiến thức; thao tác thật phải theo SMS tàu.",
+            ("bunker", "bunkering"),
+        ),
+        (
+            "rounds-alarms",
+            "Rounds & Alarms",
+            "Học cách quan sát, báo cáo và hiểu alarm/rounds mà source thực sự đề cập.",
+            ("rounds", "alarm"),
+        ),
+        (
+            "work-control",
+            "Kiểm soát công việc / Work Control",
+            "Hiểu checklist, standing orders và permit ở mức học tập trước khi áp dụng.",
+            ("checklist", "standing order", "permit to work"),
+        ),
+    ),
+    "technical-english": (
+        (
+            "marine-vocabulary",
+            "Từ vựng hàng hải / Marine Vocabulary",
+            "Học English technical terms cùng nghĩa tiếng Việt và ngữ cảnh dùng trên tàu.",
+            ("english", "vocabulary", "term", "word"),
+        ),
+        (
+            "speaking-listening",
+            "Speaking & Listening",
+            "Luyện nói/nghe để hiểu và trả lời trong tình huống kỹ thuật.",
+            ("speaking", "listening", "pronunciation"),
+        ),
+        (
+            "reporting-communication",
+            "Reporting & Communication",
+            "Luyện cách báo cáo, truyền đạt và dùng phrase đúng ngữ cảnh.",
+            ("reporting", "communication", "phrase", "radio"),
+        ),
+    ),
+    "career-practical": (
+        (
+            "interview",
+            "Phỏng vấn / Interview",
+            "Biến kiến thức kỹ thuật thành câu trả lời rõ ràng, tự nhiên và có trải nghiệm.",
+            ("interview", "question", "answer"),
+        ),
+        (
+            "cadet-onboarding",
+            "Cadet & Joining Ship",
+            "Chuẩn bị cho giai đoạn cadet, joining ship và cách học từ công việc thực tế.",
+            ("cadet", "joining ship", "career", "seafarer"),
+        ),
+        (
+            "onboard-practice",
+            "Kinh nghiệm đi tàu / Onboard Practice",
+            "Học từ creator experience nhưng luôn giữ ranh giới với procedure chính thức.",
+            ("onboard experience", "on board", "onboard"),
+        ),
+    ),
+}
+
 
 def _normalize(value: str) -> str:
     return re.sub(r"\s+", " ", value.lower()).strip()
@@ -180,6 +348,33 @@ def classify_course_track(blueprint: LessonBlueprint) -> tuple[str, str]:
     return "general-marine", "Kiến thức hàng hải tổng hợp / General Marine Knowledge"
 
 
+def classify_course_module(
+    blueprint: LessonBlueprint,
+    track_id: str,
+) -> tuple[str, str, str]:
+    haystack = _normalize(
+        " ".join(
+            [
+                blueprint.display_title,
+                blueprint.original_title,
+                " ".join(
+                    str(item.get("statement") or "")
+                    for item in blueprint.key_items
+                    if isinstance(item, dict)
+                ),
+            ]
+        )
+    )
+    for module_id, title, description, keywords in _MODULES.get(track_id, ()):
+        if any(keyword in haystack for keyword in keywords):
+            return module_id, title, description
+    return (
+        f"{track_id}-foundations",
+        "Nền tảng / Foundations",
+        "Các bài nền tảng chưa được xếp vào module chuyên biệt hơn.",
+    )
+
+
 def build_learning_course(
     *,
     blueprints: Iterable[LessonBlueprint],
@@ -201,6 +396,10 @@ def build_learning_course(
             raise LearningCourseError(f"DUPLICATE_SOURCE_LESSON:{blueprint.source_id}")
         seen_sources.add(blueprint.source_id)
         track_id, track_title = classify_course_track(blueprint)
+        module_id, module_title, module_description = classify_course_module(
+            blueprint,
+            track_id,
+        )
         safety_count = sum(
             1 for item in blueprint.key_items if bool(item.get("safety_critical"))
         )
@@ -213,7 +412,10 @@ def build_learning_course(
                 display_title=blueprint.display_title,
                 track_id=track_id,
                 track_title=track_title,
-                lesson_path=f"lessons/{blueprint.source_id}/LESSON.md",
+                module_id=module_id,
+                module_title=module_title,
+                module_description=module_description,
+                lesson_path=f"../lessons/{blueprint.source_id}/LESSON.md",
                 learning_objectives=len(blueprint.learning_objectives),
                 retrieval_questions=len(blueprint.quick_check),
                 key_items=len(blueprint.key_items),
@@ -261,22 +463,41 @@ def course_to_json(course: LearningCourse) -> dict[str, Any]:
                 "title": lesson.track_title,
                 "lesson_count": 0,
                 "lessons": [],
+                "_modules": {},
             },
         )
+        lesson_payload = {
+            "source_id": lesson.source_id,
+            "display_title": lesson.display_title,
+            "lesson_path": lesson.lesson_path,
+            "learning_objectives": lesson.learning_objectives,
+            "retrieval_questions": lesson.retrieval_questions,
+            "key_items": lesson.key_items,
+            "safety_critical_items": lesson.safety_critical_items,
+            "numeric_items": lesson.numeric_items,
+            "authority_targets": lesson.authority_targets,
+        }
         entry["lesson_count"] += 1
-        entry["lessons"].append(
+        entry["lessons"].append(lesson_payload)
+
+        module = entry["_modules"].setdefault(
+            lesson.module_id,
             {
-                "source_id": lesson.source_id,
-                "display_title": lesson.display_title,
-                "lesson_path": lesson.lesson_path,
-                "learning_objectives": lesson.learning_objectives,
-                "retrieval_questions": lesson.retrieval_questions,
-                "key_items": lesson.key_items,
-                "safety_critical_items": lesson.safety_critical_items,
-                "numeric_items": lesson.numeric_items,
-                "authority_targets": lesson.authority_targets,
-            }
+                "module_id": lesson.module_id,
+                "title": lesson.module_title,
+                "description": lesson.module_description,
+                "lesson_count": 0,
+                "lessons": [],
+            },
         )
+        module["lesson_count"] += 1
+        module["lessons"].append(lesson_payload)
+
+    output_tracks: list[dict[str, Any]] = []
+    for track in tracks.values():
+        modules = list(track.pop("_modules").values())
+        track["modules"] = modules
+        output_tracks.append(track)
 
     return {
         "schema_version": course.schema_version,
@@ -289,14 +510,13 @@ def course_to_json(course: LearningCourse) -> dict[str, Any]:
         "withheld_alu_items": course.withheld_alu_items,
         "sources_without_lesson": list(course.sources_without_lesson),
         "missing_alu_sources": list(course.missing_alu_sources),
-        "tracks": list(tracks.values()),
+        "tracks": output_tracks,
         "scope_note": (
             "Learner-facing Course V2. Vietnamese is the explanation language; English is "
             "kept for maritime terminology and interview practice. Evidence/provenance data "
             "remain available behind each lesson and do not become operational permission."
         ),
     }
-
 
 def render_course_markdown(course: LearningCourse) -> str:
     """Render a human course home page, not an engineering status report."""
