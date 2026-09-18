@@ -245,14 +245,16 @@ def transcribe_whisperx(
     return segments
 
 
-def extract_frame_jpeg(
+def _extract_frame_with_ffmpeg(
     video_path: str | Path,
     output_path: str | Path,
     *,
     timestamp_ms: int,
+    codec_args: list[str],
     ffmpeg: str = "ffmpeg",
+    accurate_seek: bool = False,
 ) -> Path:
-    """Extract one source frame with FFmpeg; never synthesize visual evidence."""
+    """Extract one source frame without fabricating or repairing visual content."""
     from marinetime.pilot.media import _run
 
     source = Path(video_path)
@@ -265,27 +267,114 @@ def extract_frame_jpeg(
         raise LocalPreprocessError("FRAME_OUTPUT_ALREADY_EXISTS")
     output.parent.mkdir(parents=True, exist_ok=True)
 
+    seek = f"{timestamp_ms / 1000:.3f}"
+    if accurate_seek:
+        command = [ffmpeg, "-i", str(source), "-ss", seek]
+    else:
+        command = [ffmpeg, "-ss", seek, "-i", str(source)]
+
     try:
-        _run([
-            ffmpeg,
-            "-ss",
-            f"{timestamp_ms / 1000:.3f}",
-            "-i",
-            str(source),
-            "-frames:v",
-            "1",
-            "-q:v",
-            "2",
-            "-y",
-            str(output),
-        ], timeout=120)
+        _run(
+            [
+                *command,
+                "-frames:v",
+                "1",
+                *codec_args,
+                "-y",
+                str(output),
+            ],
+            timeout=120,
+        )
     except MediaToolError as exc:
         output.unlink(missing_ok=True)
         raise LocalPreprocessError(str(exc)) from exc
+
     if not output.is_file() or output.stat().st_size <= 0:
         output.unlink(missing_ok=True)
         raise LocalPreprocessError("FRAME_OUTPUT_MISSING")
     return output
+
+
+def extract_frame_jpeg(
+    video_path: str | Path,
+    output_path: str | Path,
+    *,
+    timestamp_ms: int,
+    ffmpeg: str = "ffmpeg",
+) -> Path:
+    """Extract a JPEG frame with explicit MJPEG settings for Windows FFmpeg."""
+    return _extract_frame_with_ffmpeg(
+        video_path,
+        output_path,
+        timestamp_ms=timestamp_ms,
+        ffmpeg=ffmpeg,
+        codec_args=[
+            "-c:v",
+            "mjpeg",
+            "-pix_fmt",
+            "yuvj420p",
+            "-threads",
+            "1",
+            "-q:v",
+            "2",
+        ],
+    )
+
+
+def extract_frame_png(
+    video_path: str | Path,
+    output_path: str | Path,
+    *,
+    timestamp_ms: int,
+    ffmpeg: str = "ffmpeg",
+) -> Path:
+    """Lossless fallback when the local MJPEG encoder rejects a valid decoded frame."""
+    return _extract_frame_with_ffmpeg(
+        video_path,
+        output_path,
+        timestamp_ms=timestamp_ms,
+        ffmpeg=ffmpeg,
+        codec_args=["-c:v", "png", "-compression_level", "3"],
+        accurate_seek=True,
+    )
+
+
+def extract_frame_image(
+    video_path: str | Path,
+    output_stem: str | Path,
+    *,
+    timestamp_ms: int,
+    ffmpeg: str = "ffmpeg",
+) -> Path:
+    """Prefer JPEG and retry as PNG only for an MJPEG encoder failure.
+
+    This is a codec fallback, not an error-ignore path. If PNG extraction also
+    fails, the source still fails preprocessing.
+    """
+    stem = Path(output_stem)
+    jpeg_path = stem.with_suffix(".jpg")
+    try:
+        return extract_frame_jpeg(
+            video_path,
+            jpeg_path,
+            timestamp_ms=timestamp_ms,
+            ffmpeg=ffmpeg,
+        )
+    except LocalPreprocessError as exc:
+        detail = str(exc).lower()
+        mjpeg_failure = "mjpeg" in detail and (
+            "invalid argument" in detail or "nothing was written" in detail
+        )
+        if not mjpeg_failure:
+            raise
+
+    png_path = stem.with_suffix(".png")
+    return extract_frame_png(
+        video_path,
+        png_path,
+        timestamp_ms=timestamp_ms,
+        ffmpeg=ffmpeg,
+    )
 
 
 def _coerce_paddle_payload(result: Any) -> dict[str, Any] | None:
@@ -509,9 +598,9 @@ def preprocess_local_video(
     frame_records: list[dict[str, Any]] = []
     ocr_records: list[dict[str, Any]] = []
     for frame_index, timestamp_ms in enumerate(timestamps, start=1):
-        frame_path = extract_frame_jpeg(
+        frame_path = extract_frame_image(
             video,
-            frames_dir / f"frame_{frame_index:03d}.jpg",
+            frames_dir / f"frame_{frame_index:03d}",
             timestamp_ms=timestamp_ms,
         )
         relative_path = frame_path.relative_to(root).as_posix()
