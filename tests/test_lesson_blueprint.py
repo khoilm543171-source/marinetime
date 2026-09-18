@@ -35,7 +35,19 @@ def evidence_pack() -> dict:
                 "evidence_id": "SEG-002",
                 "start_ms": 24000,
                 "end_ms": 43000,
-                "text": "Before drawing anything, collect relevant information.",
+                "text": "For appraisal, before drawing anything, collect relevant voyage information.",
+            },
+            {
+                "evidence_id": "SEG-003",
+                "start_ms": 43000,
+                "end_ms": 64000,
+                "text": "During planning, draw the berth-to-berth route, check and validate it.",
+            },
+            {
+                "evidence_id": "SEG-004",
+                "start_ms": 64000,
+                "end_ms": 78000,
+                "text": "During monitoring, check position against the plan and cross-check it.",
             },
         ],
         "ocr_hits": [],
@@ -50,6 +62,33 @@ def evidence_pack() -> dict:
     }
 
 
+def _entry(
+    alu_id: str,
+    statement: str,
+    refs: list[str],
+    *,
+    statement_type: str = "creator_statement",
+    safety_critical: bool = False,
+) -> dict:
+    return {
+        "alu": {
+            "alu_id": alu_id,
+            "statement": statement,
+            "statement_type": statement_type,
+            "support_level": "directly_supported",
+            "rendering_scope": "general_educational",
+            "evidence_refs": refs,
+            "safety": {"safety_critical": safety_critical, "numeric_claim": False},
+        },
+        "decision": {
+            "accepted_for_reference": True,
+            "accepted_for_education": True,
+            "accepted_for_operational_use": False,
+            "reasons": ["PROVENANCE_NOT_OPERATIONAL_AUTHORITY"],
+        },
+    }
+
+
 def alu_artifact() -> dict:
     return {
         "schema_version": "1.0",
@@ -58,46 +97,48 @@ def alu_artifact() -> dict:
         "prompt_version": "alu_extraction_v5",
         "usage": {},
         "alus": [
-            {
-                "alu": {
-                    "alu_id": "ALU-001",
-                    "statement": (
-                        "The creator states that passage planning consists of four stages: "
-                        "appraisal, planning, execution, and monitoring."
-                    ),
-                    "statement_type": "creator_statement",
-                    "support_level": "directly_supported",
-                    "rendering_scope": "general_educational",
-                    "evidence_refs": ["SEG-001"],
-                    "safety": {"safety_critical": False, "numeric_claim": False},
-                },
-                "decision": {
-                    "accepted_for_reference": True,
-                    "accepted_for_education": True,
-                    "accepted_for_operational_use": False,
-                    "reasons": ["PROVENANCE_NOT_OPERATIONAL_AUTHORITY"],
-                },
-            },
-            {
-                "alu": {
-                    "alu_id": "ALU-002",
-                    "statement": (
-                        "The creator recommends collecting relevant voyage information "
-                        "before drawing the route."
-                    ),
-                    "statement_type": "recommendation",
-                    "support_level": "directly_supported",
-                    "rendering_scope": "general_educational",
-                    "evidence_refs": ["SEG-002"],
-                    "safety": {"safety_critical": True, "numeric_claim": False},
-                },
-                "decision": {
-                    "accepted_for_reference": True,
-                    "accepted_for_education": True,
-                    "accepted_for_operational_use": False,
-                    "reasons": ["PROVENANCE_NOT_OPERATIONAL_AUTHORITY"],
-                },
-            },
+            _entry(
+                "ALU-001",
+                "The creator states that passage planning consists of four stages: appraisal, planning, execution, and monitoring.",
+                ["SEG-001"],
+            ),
+            _entry(
+                "ALU-002",
+                "The creator recommends explaining passage planning as if from real experience rather than reading a checklist in an interview.",
+                ["SEG-001"],
+                statement_type="recommendation",
+            ),
+            _entry(
+                "ALU-003",
+                "The creator describes collecting relevant voyage information before drawing the route during appraisal.",
+                ["SEG-002"],
+                safety_critical=True,
+            ),
+            _entry(
+                "ALU-004",
+                "The creator states that during planning, the officer draws the berth-to-berth route, checks it, validates it, and discusses it.",
+                ["SEG-003"],
+                safety_critical=True,
+            ),
+            _entry(
+                "ALU-005",
+                "The creator reports that during execution, the bridge team follows the approved plan after proper discussion.",
+                ["SEG-003"],
+                safety_critical=True,
+            ),
+            _entry(
+                "ALU-006",
+                "The creator recommends never relying on one position-fixing method only during monitoring.",
+                ["SEG-004"],
+                statement_type="recommendation",
+                safety_critical=True,
+            ),
+            _entry(
+                "ALU-007",
+                "The creator states that during monitoring, position should be checked against the plan and cross-checked by radar and visual means.",
+                ["SEG-004"],
+                safety_critical=True,
+            ),
         ],
     }
 
@@ -109,45 +150,89 @@ class LessonBlueprintTests(unittest.TestCase):
             alu_artifact=alu_artifact(),
             title=(
                 "Kể 4 giai đoạn passage planning mà trả lời nhanh quá là TRƯỢT "
+                "Nói thế này mới ăn How to answer carefully about the question "
                 "do NGUYEN CHI HIEU tạo với bản nhạc original sound"
             ),
         )
 
     def test_clean_title_removes_platform_boilerplate(self) -> None:
         title = clean_display_title(self._card().title)
+        self.assertNotIn("tạo với bản nhạc", title)
+
+    def test_passage_profile_uses_clean_topic_title(self) -> None:
+        blueprint = build_lesson_blueprint(self._card())
         self.assertEqual(
-            title,
-            "Kể 4 giai đoạn passage planning mà trả lời nhanh quá là TRƯỢT",
+            blueprint.display_title,
+            "Passage Planning — 4 Stages and Interview Answer",
         )
 
-    def test_blueprint_preserves_alu_grounding(self) -> None:
+    def test_learning_objectives_are_measurable_not_alu_repeats(self) -> None:
         blueprint = build_lesson_blueprint(self._card())
-        self.assertEqual(blueprint.source_id, "RAW-PP")
-        self.assertEqual(len(blueprint.learning_objectives), 2)
-        self.assertEqual(blueprint.learning_objectives[0].alu_ids, ("ALU-001",))
-        self.assertEqual(blueprint.quick_check[1]["alu_id"], "ALU-002")
+        texts = [item.text for item in blueprint.learning_objectives]
+        self.assertEqual(len(texts), 3)
+        self.assertTrue(texts[0].startswith("List the four passage-planning stages"))
+        self.assertTrue(texts[1].startswith("Explain what the source says"))
+        self.assertTrue(texts[2].startswith("Give a 60–90 second interview answer"))
+        self.assertFalse(any("The creator states that" in text for text in texts))
 
-    def test_creator_safety_content_requires_authoritative_verification(self) -> None:
+    def test_mental_model_is_stage_based(self) -> None:
+        blueprint = build_lesson_blueprint(self._card())
+        joined = "\n".join(blueprint.mental_model)
+        self.assertIn("Appraisal →", joined)
+        self.assertIn("Planning →", joined)
+        self.assertIn("Execution →", joined)
+        self.assertIn("Monitoring →", joined)
+
+    def test_quick_check_is_specific_retrieval_practice(self) -> None:
+        blueprint = build_lesson_blueprint(self._card())
+        prompts = [item["prompt"] for item in blueprint.quick_check]
+        self.assertIn("list the four passage-planning stages", prompts[0].lower())
+        self.assertTrue(any("During appraisal" in prompt for prompt in prompts))
+        self.assertTrue(any("During planning" in prompt for prompt in prompts))
+        self.assertTrue(any("During execution" in prompt for prompt in prompts))
+        self.assertTrue(any("position and progress" in prompt for prompt in prompts))
+
+    def test_creator_safety_content_creates_compact_authority_queue(self) -> None:
         blueprint = build_lesson_blueprint(self._card())
         self.assertTrue(blueprint.authoritative_verification_required)
+        self.assertEqual(len(blueprint.authority_targets), 7)
+        self.assertIn("ALU-007", blueprint.authority_targets)
 
-    def test_preview_hides_evidence_behind_details(self) -> None:
+    def test_preview_is_less_alu_like_and_keeps_evidence_collapsed(self) -> None:
         card = self._card()
         blueprint = build_lesson_blueprint(card)
         text = render_lesson_preview(
             blueprint,
             evidence_anchors=card.evidence_anchors,
         )
-        self.assertIn("## Learning goal", text)
-        self.assertIn("## Big picture", text)
+        self.assertIn("## Learning goals", text)
+        self.assertIn("## Mental model", text)
+        self.assertIn("## Learn the source", text)
         self.assertIn("## Oral interview practice", text)
+        self.assertIn("## Retrieval practice", text)
         self.assertIn("<summary>Show evidence</summary>", text)
-        self.assertIn("SEG-001", text)
+        self.assertIn("Interview question: **How do you make a passage plan?**", text)
+        self.assertIn("Authority check queued: **" if False else "Authority check queued", text)
+        self.assertNotIn("### 1. The creator states that passage planning", text)
 
-    def test_blueprint_json_marks_preview_scope(self) -> None:
+    def test_trust_boundary_does_not_repeat_one_warning_per_safety_alu(self) -> None:
+        card = self._card()
+        blueprint = build_lesson_blueprint(card)
+        text = render_lesson_preview(
+            blueprint,
+            evidence_anchors=card.evidence_anchors,
+        )
+        self.assertIn("Safety-critical source claims: 5.", text)
+        self.assertIn("Authority targets: ALU-001", text)
+        self.assertNotIn("ALU-003: safety-critical content", text)
+
+    def test_blueprint_json_marks_v11_and_authority_targets(self) -> None:
         payload = blueprint_to_json(build_lesson_blueprint(self._card()))
+        self.assertEqual(payload["schema_version"], "1.1")
         self.assertEqual(payload["artifact_type"], "source_lesson_blueprint_preview")
         self.assertTrue(payload["authoritative_verification_required"])
+        self.assertIn("ALU-003", payload["authority_targets"])
+        self.assertEqual(len(payload["mental_model"]), 4)
 
     def test_writes_preview_artifacts_atomically(self) -> None:
         card = self._card()
