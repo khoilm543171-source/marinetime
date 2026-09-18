@@ -7,6 +7,12 @@ from pathlib import Path
 from typing import Any
 
 from .cards import SourceLearningCard
+from .humanize import (
+    glossary_for_texts,
+    simple_safety_note,
+    vietnamese_explanation,
+    vietnamese_heading,
+)
 
 
 class LessonBlueprintError(ValueError):
@@ -146,17 +152,17 @@ def _passage_profile(
     objectives = (
         LearningObjective(
             "LO-01",
-            "List the four passage-planning stages in the correct order.",
+            "Nêu đúng thứ tự 4 giai đoạn passage planning / List the four passage-planning stages in the correct order.",
             (str(framework.get("alu_id")),) if framework else all_ids,
         ),
         LearningObjective(
             "LO-02",
-            "Explain what the source says happens during appraisal, planning, execution, and monitoring.",
+            "Giải thích bằng tiếng Việt việc gì xảy ra ở Appraisal, Planning, Execution và Monitoring; sau đó nói lại các thuật ngữ chính bằng English.",
             tuple(str(item.get("alu_id")) for item in stage_items),
         ),
         LearningObjective(
             "LO-03",
-            "Give a 60–90 second interview answer that names the four stages and explains the work done in each stage.",
+            "Trả lời phỏng vấn 60–90 giây: nêu 4 giai đoạn bằng English và giải thích rõ việc làm trong từng giai đoạn.",
             all_ids,
         ),
     )
@@ -176,7 +182,7 @@ def _passage_profile(
         questions.append(
             {
                 "question_id": "Q-01",
-                "prompt": "Without looking back, list the four passage-planning stages in order.",
+                "prompt": "Không nhìn lại bài: nêu 4 giai đoạn passage planning theo đúng thứ tự, ưu tiên nói tên giai đoạn bằng English.",
                 "answer_anchor": str(framework.get("statement", "")),
                 "alu_id": str(framework.get("alu_id", "")),
             }
@@ -185,7 +191,7 @@ def _passage_profile(
         questions.append(
             {
                 "question_id": "Q-02",
-                "prompt": "During appraisal, what information does this source say should be gathered before drawing the route? Recall at least four examples.",
+                "prompt": "Appraisal là gì? Trước khi vẽ tuyến, nguồn nói cần thu thập những thông tin nào? Hãy trả lời bằng tiếng Việt và giữ các thuật ngữ English quan trọng.",
                 "answer_anchor": str(appraisal.get("statement", "")),
                 "alu_id": str(appraisal.get("alu_id", "")),
             }
@@ -194,7 +200,7 @@ def _passage_profile(
         questions.append(
             {
                 "question_id": "Q-03",
-                "prompt": "During planning, what route checks and actions does this source mention before the route is used?",
+                "prompt": "Ở Planning, nguồn nói phải làm và kiểm tra gì với tuyến trước khi sử dụng? Trả lời bằng tiếng Việt, dùng đúng thuật ngữ berth-to-berth nếu có.",
                 "answer_anchor": str(planning.get("statement", "")),
                 "alu_id": str(planning.get("alu_id", "")),
             }
@@ -203,7 +209,7 @@ def _passage_profile(
         questions.append(
             {
                 "question_id": "Q-04",
-                "prompt": "During execution, what does this source say the bridge team does?",
+                "prompt": "Ở Execution, nguồn nói bridge team làm gì với approved plan?",
                 "answer_anchor": str(execution.get("statement", "")),
                 "alu_id": str(execution.get("alu_id", "")),
             }
@@ -212,21 +218,22 @@ def _passage_profile(
         questions.append(
             {
                 "question_id": "Q-05",
-                "prompt": "How does this source say the vessel's position and progress should be monitored and cross-checked?",
+                "prompt": "Ở Monitoring, vị trí và tiến trình của tàu được theo dõi/cross-check như thế nào theo đúng nội dung nguồn?",
                 "answer_anchor": str(monitoring.get("statement", "")),
                 "alu_id": str(monitoring.get("alu_id", "")),
             }
         )
 
     oral = (
-        "Interview question: **How do you make a passage plan?**\n\n"
-        "Answer in 60–90 seconds. Use this structure:\n"
-        "1. Name the four stages in order.\n"
-        "2. Appraisal — explain what information you gather before drawing the route.\n"
-        "3. Planning — explain the berth-to-berth route checks, validation, and discussion mentioned in the source.\n"
-        "4. Execution — explain what happens once the plan is approved.\n"
-        "5. Monitoring — explain how progress and position are checked and cross-checked.\n\n"
-        "Do not only recite the four stage names; demonstrate that you understand what happens in each stage."
+        "**Interview question:** How do you make a passage plan?\n\n"
+        "**Cách luyện:** trả lời 60–90 giây. Có thể hiểu ý bằng tiếng Việt trước, "
+        "nhưng khi nói hãy giữ các thuật ngữ English chính xác.\n\n"
+        "1. Name the four stages: Appraisal → Planning → Execution → Monitoring.\n"
+        "2. Appraisal — giải thích thông tin cần thu thập trước khi vẽ tuyến.\n"
+        "3. Planning — giải thích berth-to-berth route, kiểm tra/validation và thảo luận theo nguồn.\n"
+        "4. Execution — giải thích việc thực hiện approved plan.\n"
+        "5. Monitoring — giải thích cách theo dõi progress/position và cross-check.\n\n"
+        "**Mục tiêu:** người nghe thấy bạn hiểu công việc, không chỉ đọc thuộc 4 cái tên."
     )
 
     return (
@@ -253,7 +260,10 @@ def _generic_profile(
         objectives.append(
             LearningObjective(
                 objective_id=f"LO-{index:02d}",
-                text=f"Explain this evidence-backed idea in your own words: {_plain_claim(str(item.get('statement', '')))}",
+                text=(
+                    "Giải thích ý này bằng tiếng Việt, sau đó nói lại 1–2 câu English kỹ thuật: "
+                    f"{_plain_claim(str(item.get('statement', '')))}"
+                ),
                 alu_ids=(str(item.get("alu_id")),),
             )
         )
@@ -262,15 +272,19 @@ def _generic_profile(
     quick_check = tuple(
         {
             "question_id": f"Q-{index:02d}",
-            "prompt": f"Without looking back, explain: {_item_heading(item)}.",
+            "prompt": (
+                "Không nhìn lại bài: giải thích bằng tiếng Việt rồi nói lại thuật ngữ English chính: "
+                f"{_item_heading(item)}."
+            ),
             "answer_anchor": str(item.get("statement", "")),
             "alu_id": str(item.get("alu_id", "")),
         }
         for index, item in enumerate(key_items[:5], start=1)
     )
     oral = (
-        f"Explain **{clean_display_title(card.title)}** in 60–90 seconds without reading notes. "
-        "State the main idea first, then support it with the evidence-backed points shown in this lesson."
+        f"Giải thích **{clean_display_title(card.title)}** trong 60–90 giây mà không đọc note. "
+        "Bắt đầu bằng ý chính bằng tiếng Việt; sau đó dùng đúng các thuật ngữ English quan trọng "
+        "và chỉ nói những gì nguồn/evidence thực sự hỗ trợ."
     )
     return clean_display_title(card.title), tuple(objectives), mental_model, quick_check, oral
 
@@ -354,93 +368,148 @@ def render_lesson_preview(
     *,
     evidence_anchors: dict[str, tuple[str, ...]],
 ) -> str:
+    """Render the learner document; machine QA/provenance stays collapsed."""
+
+    lesson_texts = [blueprint.display_title]
+    lesson_texts.extend(str(item.get("statement") or "") for item in blueprint.key_items)
+    glossary = glossary_for_texts(lesson_texts)
+    safety_count = sum(
+        1 for item in blueprint.key_items if bool(item.get("safety_critical"))
+    )
+    numeric_count = sum(
+        1 for item in blueprint.key_items if bool(item.get("numeric_claim"))
+    )
+
     lines: list[str] = [
         f"# {blueprint.display_title}",
         "",
-        "> Source-grounded lesson preview. Creator experience remains creator experience until higher-authority evidence verifies it.",
+        "> **Cách dùng bài này:** hiểu bằng tiếng Việt trước, giữ thuật ngữ kỹ thuật bằng English, "
+        "sau đó đóng tài liệu và tự nói lại. Không cần đọc JSON/ALU để học.",
         "",
-        "## Learning goals",
+        "## Bạn sẽ học gì / What you will learn",
         "",
     ]
     for objective in blueprint.learning_objectives:
-        lines.append(f"- **{objective.objective_id}:** {objective.text}")
+        lines.append(f"- {objective.text}")
 
-    lines.extend(["", "## Mental model", ""])
+    lines.extend(
+        [
+            "",
+            "## Học bài này trong 10–15 phút",
+            "",
+            "1. Đọc **Bản đồ ý chính** để biết bài đang nói về cái gì.",
+            "2. Với mỗi ý, đọc **English technical point** rồi đọc **Giải thích tiếng Việt**.",
+            "3. Đóng phần nội dung và trả lời **Tự kiểm tra** bằng trí nhớ.",
+            "4. Nói phần **Oral practice** thành tiếng như đang trả lời sĩ quan/phỏng vấn.",
+            "5. Chỉ mở **Evidence / nguồn gốc** khi muốn kiểm tra tại sao Marinetime nói điều đó.",
+            "",
+            "## Bản đồ ý chính / Mental model",
+            "",
+        ]
+    )
     if blueprint.mental_model:
         for line in blueprint.mental_model:
             lines.append(f"- {line}")
     else:
-        lines.append("- No compact mental model could be derived deterministically.")
+        lines.append("- Bài này chưa có mental model ngắn; học theo từng ý bên dưới.")
 
-    lines.extend(["", "## Learn the source", ""])
+    if glossary:
+        lines.extend(["", "## English cần nhớ / Technical vocabulary", ""])
+        for english, vietnamese in glossary:
+            lines.append(f"- **{english}** → {vietnamese}")
+
+    lines.extend(["", "## Nội dung bài học", ""])
     for index, item in enumerate(blueprint.key_items, start=1):
         heading = _item_heading(item)
+        vi_heading = vietnamese_heading(heading)
+        anchors = evidence_anchors.get(str(item.get("alu_id")), ())
+        vi_explanation = vietnamese_explanation(
+            item,
+            heading=heading,
+            anchors=anchors,
+        )
         lines.extend(
             [
-                f"### {index}. {heading}",
+                f"### {index}. {vi_heading}",
                 "",
-                f"**Source-backed point:** {item['statement']}",
+                f"**English technical point**  ",
+                str(item.get("statement") or "").strip(),
                 "",
-                f"- **Support:** {item.get('support_level')}",
+                "**Giải thích tiếng Việt**  ",
+                vi_explanation,
+                "",
             ]
         )
+
         flags: list[str] = []
         if item.get("safety_critical"):
             flags.append("safety-critical")
         if item.get("numeric_claim"):
             flags.append("numeric")
         if flags:
-            lines.append("- **Needs extra care:** " + ", ".join(flags))
+            lines.append(
+                "**Khi học ý này:** hiểu nguyên tắc trước; chưa dùng nó như hướng dẫn thao tác thật "
+                "cho tới khi đã đối chiếu nguồn có thẩm quyền."
+            )
+            lines.append("")
 
-        lines.extend(["", "<details>", "<summary>Show evidence</summary>", ""])
-        anchors = evidence_anchors.get(str(item.get("alu_id")), ())
+        lines.extend(
+            [
+                "<details>",
+                "<summary>Evidence / Nguồn gốc của ý này</summary>",
+                "",
+            ]
+        )
         if anchors:
             for anchor in anchors:
                 lines.append(f"- {anchor}")
         else:
-            lines.append("- No evidence anchor available.")
+            lines.append("- Không có evidence anchor khả dụng.")
         lines.extend(["", "</details>", ""])
 
-    lines.extend(["## Oral interview practice", "", blueprint.oral_exam_prompt, ""])
+    notes = simple_safety_note(
+        safety_count=safety_count,
+        numeric_count=numeric_count,
+    )
+    if notes:
+        lines.extend(["## Lưu ý an toàn — đọc như người học", ""])
+        for note in notes:
+            lines.append(note)
+            lines.append("")
+
+    lines.extend(["## Tự kiểm tra / Retrieval practice", ""])
+    lines.append(
+        "Đóng phần nội dung phía trên. Trả lời bằng tiếng Việt trước; sau đó nói lại các thuật ngữ "
+        "English quan trọng mà không nhìn bài."
+    )
+    lines.append("")
+    for item in blueprint.quick_check:
+        lines.append(f"- **{item['question_id']}** — {item['prompt']}")
+
+    lines.extend(["", "## Oral practice / Luyện nói", "", blueprint.oral_exam_prompt, ""])
     lines.extend(
         [
-            "### Self-check",
+            "### Tự chấm nhanh",
             "",
-            "- Did I explain the work done in each stage, rather than only reciting labels?",
-            "- Did I stay inside what the evidence actually supports?",
-            "- Did I avoid treating creator experience as an official procedure?",
+            "- Tôi có giải thích được **ý nghĩa**, hay chỉ đọc thuộc từ khóa?",
+            "- Tôi có dùng đúng thuật ngữ English quan trọng không?",
+            "- Tôi có nói thêm điều mà nguồn không hỗ trợ không?",
             "",
-            "## Retrieval practice",
+            "<details>",
+            "<summary>Thông tin kiểm chứng kỹ thuật — không cần đọc để học bài</summary>",
             "",
         ]
     )
-    for item in blueprint.quick_check:
-        lines.append(f"{item['question_id']}. {item['prompt']}")
-
-    lines.extend(["", "## Trust boundary", ""])
     if blueprint.authoritative_verification_required:
-        safety_count = sum(
-            1 for item in blueprint.key_items if bool(item.get("safety_critical"))
-        )
-        numeric_count = sum(
-            1 for item in blueprint.key_items if bool(item.get("numeric_claim"))
-        )
         lines.append(
-            f"- **Authority check queued:** {len(blueprint.authority_targets)} ALU(s)."
+            f"- Có {len(blueprint.authority_targets)} điểm đang cần/đã chờ authority review trước khi coi là hướng dẫn vận hành."
         )
-        lines.append(f"- Safety-critical source claims: {safety_count}.")
+        lines.append(f"- Safety-critical items: {safety_count}.")
         if numeric_count:
-            lines.append(f"- Numeric claims needing context/unit verification: {numeric_count}.")
-        lines.append(
-            "- These claims are usable for source-level learning only; they are not operational guidance yet."
-        )
-        lines.append(
-            "- Authority targets: " + ", ".join(blueprint.authority_targets)
-        )
+            lines.append(f"- Numeric items: {numeric_count}.")
+        lines.append("- Internal authority targets: " + ", ".join(blueprint.authority_targets))
     else:
-        lines.append(
-            "- No additional authority queue was created by this preview; existing validation still applies."
-        )
+        lines.append("- Bài này không tạo thêm authority queue ở bước source-level.")
 
     provenance_warning = next(
         (
@@ -455,16 +524,7 @@ def render_lesson_preview(
     )
     if provenance_warning:
         lines.append(f"- {provenance_warning}")
-
-    lines.extend(
-        [
-            "",
-            "## Next stage",
-            "",
-            "Cross-source Topic Packet → Authority Verifier → Instructional Designer → assessment QA.",
-            "",
-        ]
-    )
+    lines.extend(["", "</details>", ""])
     return "\n".join(lines)
 
 
