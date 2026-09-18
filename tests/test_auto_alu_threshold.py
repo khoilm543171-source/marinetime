@@ -12,6 +12,7 @@ sys.path.insert(0, str(ROOT / "src"))
 from marinetime.pipeline.auto_alu import (  # noqa: E402
     AutoALUCandidate,
     discover_auto_alu_candidates,
+    is_global_budget_pause,
     run_auto_alu_threshold,
     select_threshold_batch,
 )
@@ -96,6 +97,12 @@ class AutoALUThresholdTests(unittest.TestCase):
     def test_threshold_must_be_positive(self) -> None:
         with self.assertRaisesRegex(ValueError, "AUTO_ALU_THRESHOLD_MUST_BE_POSITIVE"):
             select_threshold_batch([], threshold=0)
+
+    def test_candidate_input_limit_does_not_count_as_global_pause(self) -> None:
+        self.assertFalse(is_global_budget_pause("MAX_INPUT_TOKENS_PER_CALL"))
+        self.assertFalse(is_global_budget_pause("MAX_TOKENS_PER_VIDEO"))
+        self.assertTrue(is_global_budget_pause("MARINETIME_CLOSEOUT_MODE"))
+        self.assertTrue(is_global_budget_pause("MAX_DAILY_TOKENS"))
 
 
 if __name__ == "__main__":
