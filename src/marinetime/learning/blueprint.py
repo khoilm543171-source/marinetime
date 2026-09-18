@@ -126,7 +126,9 @@ def _passage_profile(
     str,
 ]:
     framework = _find_item(key_items, "four stages", "passage planning")
-    appraisal = _find_item(key_items, "appraisal")
+    appraisal = _find_item(key_items, "appraisal", "before")
+    if appraisal is None:
+        appraisal = _find_item(key_items, "appraisal", "collect")
     planning = _find_item(key_items, "during planning")
     execution = _find_item(key_items, "execution")
     monitoring = _find_item(key_items, "monitoring", "cross-checked")
