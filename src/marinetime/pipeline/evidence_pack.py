@@ -130,8 +130,38 @@ def validate_evidence_pack(pack: dict[str, Any]) -> EvidencePackSummary:
                     raise EvidencePackError(f"OCR_{index}_MISSING_TEXT")
 
             elif collection == "frames":
-                if not _valid_timestamp_ms(item.get("timestamp_ms")):
+                timestamp_ms = item.get("timestamp_ms")
+                if not _valid_timestamp_ms(timestamp_ms):
                     raise EvidencePackError(f"FRAME_{index}_INVALID_TIMESTAMP")
+
+                requested_timestamp_ms = item.get("requested_timestamp_ms")
+                fallback_reason = item.get("timestamp_fallback_reason")
+                if requested_timestamp_ms is not None and not _valid_timestamp_ms(
+                    requested_timestamp_ms
+                ):
+                    raise EvidencePackError(
+                        f"FRAME_{index}_INVALID_REQUESTED_TIMESTAMP"
+                    )
+                if fallback_reason is not None:
+                    if fallback_reason != "NO_FRAME_AT_REQUESTED_TIMESTAMP":
+                        raise EvidencePackError(
+                            f"FRAME_{index}_INVALID_TIMESTAMP_FALLBACK_REASON"
+                        )
+                    if requested_timestamp_ms is None:
+                        raise EvidencePackError(
+                            f"FRAME_{index}_FALLBACK_WITHOUT_REQUESTED_TIMESTAMP"
+                        )
+                    if timestamp_ms == requested_timestamp_ms:
+                        raise EvidencePackError(
+                            f"FRAME_{index}_FALLBACK_WITHOUT_TIMESTAMP_CHANGE"
+                        )
+                elif (
+                    requested_timestamp_ms is not None
+                    and timestamp_ms != requested_timestamp_ms
+                ):
+                    raise EvidencePackError(
+                        f"FRAME_{index}_TIMESTAMP_CHANGED_WITHOUT_FALLBACK_REASON"
+                    )
 
     if not evidence_ids:
         raise EvidencePackError("NO_EVIDENCE")

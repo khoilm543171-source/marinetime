@@ -274,7 +274,7 @@ def _extract_frame_with_ffmpeg(
         command = [ffmpeg, "-ss", seek, "-i", str(source)]
 
     try:
-        _run(
+        result = _run(
             [
                 *command,
                 "-frames:v",
@@ -291,7 +291,20 @@ def _extract_frame_with_ffmpeg(
 
     if not output.is_file() or output.stat().st_size <= 0:
         output.unlink(missing_ok=True)
-        raise LocalPreprocessError("FRAME_OUTPUT_MISSING")
+        stderr_lines = [
+            line.strip()
+            for line in (result.stderr or "").splitlines()
+            if line.strip()
+        ]
+        detail = " | ".join(stderr_lines[-8:])[:1200]
+        suffix = f":{detail}" if detail else ""
+        raise LocalPreprocessError(
+            "FRAME_OUTPUT_MISSING"
+            f":timestamp_ms={timestamp_ms}"
+            f":accurate_seek={str(accurate_seek).lower()}"
+            f":output={output.name}"
+            f"{suffix}"
+        )
     return output
 
 
@@ -376,6 +389,50 @@ def extract_frame_image(
         timestamp_ms=timestamp_ms,
         ffmpeg=ffmpeg,
     )
+
+
+def extract_frame_image_with_timestamp_fallback(
+    video_path: str | Path,
+    output_stem: str | Path,
+    *,
+    timestamp_ms: int,
+    ffmpeg: str = "ffmpeg",
+) -> tuple[Path, int, str | None]:
+    """Extract a real source frame and expose any timestamp fallback explicitly."""
+    try:
+        image_path = extract_frame_image(
+            video_path,
+            output_stem,
+            timestamp_ms=timestamp_ms,
+            ffmpeg=ffmpeg,
+        )
+        return image_path, timestamp_ms, None
+    except LocalPreprocessError as exc:
+        if not str(exc).startswith("FRAME_OUTPUT_MISSING"):
+            raise
+
+    if timestamp_ms == 0:
+        raise LocalPreprocessError(
+            "FRAME_OUTPUT_MISSING_AT_FALLBACK_TIMESTAMP:timestamp_ms=0"
+        )
+
+    fallback_stem = Path(output_stem).with_name(
+        f"{Path(output_stem).name}_fallback_000000000"
+    )
+    try:
+        image_path = extract_frame_png(
+            video_path,
+            fallback_stem.with_suffix(".png"),
+            timestamp_ms=0,
+            ffmpeg=ffmpeg,
+        )
+    except LocalPreprocessError as exc:
+        raise LocalPreprocessError(
+            "FRAME_OUTPUT_MISSING_AT_REQUESTED_AND_FALLBACK_TIMESTAMP:"
+            f"requested_timestamp_ms={timestamp_ms}:fallback_timestamp_ms=0:{exc}"
+        ) from exc
+
+    return image_path, 0, "NO_FRAME_AT_REQUESTED_TIMESTAMP"
 
 
 def _coerce_paddle_payload(result: Any) -> dict[str, Any] | None:
@@ -599,17 +656,23 @@ def preprocess_local_video(
     frame_records: list[dict[str, Any]] = []
     ocr_records: list[dict[str, Any]] = []
     for frame_index, timestamp_ms in enumerate(timestamps, start=1):
-        frame_path = extract_frame_image(
-            video,
-            frames_dir / f"frame_{frame_index:03d}",
-            timestamp_ms=timestamp_ms,
+        frame_path, actual_timestamp_ms, timestamp_fallback_reason = (
+            extract_frame_image_with_timestamp_fallback(
+                video,
+                frames_dir / f"frame_{frame_index:03d}",
+                timestamp_ms=timestamp_ms,
+            )
         )
         relative_path = frame_path.relative_to(root).as_posix()
-        frame_records.append({
-            "timestamp_ms": timestamp_ms,
+        frame_record: dict[str, Any] = {
+            "timestamp_ms": actual_timestamp_ms,
+            "requested_timestamp_ms": timestamp_ms,
             "artifact_path": relative_path,
             "content_hash": f"sha256:{sha256_file(frame_path)}",
-        })
+        }
+        if timestamp_fallback_reason is not None:
+            frame_record["timestamp_fallback_reason"] = timestamp_fallback_reason
+        frame_records.append(frame_record)
         ocr_hits = (
             runtime.ocr(frame_path)
             if runtime is not None
@@ -622,7 +685,7 @@ def preprocess_local_video(
         )
         for hit in ocr_hits:
             ocr_records.append({
-                "timestamp_ms": timestamp_ms,
+                "timestamp_ms": actual_timestamp_ms,
                 "text": hit["text"],
                 "score": hit.get("score"),
                 "polygon": hit.get("polygon"),
