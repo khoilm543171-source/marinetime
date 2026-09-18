@@ -31,6 +31,12 @@ PROMPTS: dict[str, PromptSpec] = {
         path=Path("prompts/assessment_eval_v1.txt"),
         default_max_output_tokens=1_000,
     ),
+    "bug_audit": PromptSpec(
+        task="bug_audit",
+        version="bug_audit_v1",
+        path=Path("prompts/bug_audit_v1.txt"),
+        default_max_output_tokens=2_500,
+    ),
 }
 
 
