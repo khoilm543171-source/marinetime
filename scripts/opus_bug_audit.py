@@ -6,6 +6,7 @@ import json
 import platform
 import subprocess
 import sys
+from dataclasses import replace
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -29,6 +30,12 @@ def parser() -> argparse.ArgumentParser:
     )
     p.add_argument("--db", type=Path, default=DEFAULT_DB)
     p.add_argument("--out", type=Path, default=DEFAULT_OUT)
+    p.add_argument(
+        "--timeout-seconds",
+        type=float,
+        default=300.0,
+        help="Read timeout for this one-shot Opus audit only; no automatic retry is performed.",
+    )
     p.add_argument(
         "--log",
         type=Path,
@@ -130,8 +137,13 @@ def _build_packet(db_path: Path, log_path: Path | None) -> str:
 def main() -> int:
     args = parser().parse_args()
     try:
+        if args.timeout_seconds <= 0:
+            raise ValueError("TIMEOUT_SECONDS_MUST_BE_POSITIVE")
         packet = _build_packet(args.db, args.log)
-        settings = ClaudeSettings.from_env()
+        settings = replace(
+            ClaudeSettings.from_env(),
+            timeout_seconds=args.timeout_seconds,
+        )
     except ValueError as exc:
         print(f"OPUS_BUG_AUDIT_FAILED:{exc}", file=sys.stderr)
         return 2
@@ -139,7 +151,9 @@ def main() -> int:
     print("OPUS_NOTICE task=bug_audit")
     print(f"provider={settings.provider}")
     print(f"model={settings.model}")
+    print(f"timeout_seconds={settings.timeout_seconds:g}")
     print("reason=explicit_user_requested_bug_audit")
+    print("automatic_retry=false")
     print("This call will consume guarded Marinetime Opus quota.", flush=True)
 
     try:
