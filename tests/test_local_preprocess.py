@@ -13,9 +13,11 @@ from marinetime.pilot.local_preprocess import (
     LocalPreprocessError,
     SceneWindow,
     _coerce_paddle_payload,
+    _extract_frame_with_ffmpeg,
     _seconds_to_ms,
     build_local_evidence_pack,
     extract_frame_image,
+    extract_frame_image_with_timestamp_fallback,
     select_keyframe_timestamps,
     transcribe_video_audio,
 )
@@ -189,6 +191,82 @@ class LocalPreprocessTests(unittest.TestCase):
 
         self.assertEqual(result, Path("frame_001.png"))
         mocked_png.assert_called_once()
+
+
+    @patch("marinetime.pilot.media._run")
+    def test_successful_ffmpeg_without_frame_keeps_diagnostics(self, mocked_run) -> None:
+        import subprocess
+        import tempfile
+
+        mocked_run.return_value = subprocess.CompletedProcess(
+            ["ffmpeg"],
+            0,
+            "",
+            "frame=0\nOutput file is empty, nothing was encoded\n",
+        )
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            source = root / "video.mp4"
+            output = root / "frame.jpg"
+            source.write_bytes(b"video")
+            with self.assertRaises(LocalPreprocessError) as caught:
+                _extract_frame_with_ffmpeg(
+                    source,
+                    output,
+                    timestamp_ms=15000,
+                    codec_args=["-c:v", "mjpeg"],
+                )
+
+        message = str(caught.exception)
+        self.assertTrue(message.startswith("FRAME_OUTPUT_MISSING"))
+        self.assertIn("timestamp_ms=15000", message)
+        self.assertIn("accurate_seek=false", message)
+        self.assertIn("nothing was encoded", message.lower())
+
+    @patch("marinetime.pilot.local_preprocess.extract_frame_png")
+    @patch("marinetime.pilot.local_preprocess.extract_frame_image")
+    def test_timestamp_fallback_records_actual_zero_timestamp(
+        self,
+        mocked_image,
+        mocked_png,
+    ) -> None:
+        mocked_image.side_effect = LocalPreprocessError(
+            "FRAME_OUTPUT_MISSING:timestamp_ms=15000"
+        )
+        mocked_png.return_value = Path("frame_001_fallback_000000000.png")
+
+        path, actual_timestamp, reason = extract_frame_image_with_timestamp_fallback(
+            "video.mp4",
+            "frames/frame_001",
+            timestamp_ms=15000,
+        )
+
+        self.assertEqual(path, Path("frame_001_fallback_000000000.png"))
+        self.assertEqual(actual_timestamp, 0)
+        self.assertEqual(reason, "NO_FRAME_AT_REQUESTED_TIMESTAMP")
+        mocked_png.assert_called_once()
+
+    @patch("marinetime.pilot.local_preprocess.extract_frame_png")
+    @patch("marinetime.pilot.local_preprocess.extract_frame_image")
+    def test_timestamp_fallback_preserves_failure_when_zero_also_fails(
+        self,
+        mocked_image,
+        mocked_png,
+    ) -> None:
+        mocked_image.side_effect = LocalPreprocessError("FRAME_OUTPUT_MISSING")
+        mocked_png.side_effect = LocalPreprocessError(
+            "FRAME_OUTPUT_MISSING:timestamp_ms=0"
+        )
+
+        with self.assertRaisesRegex(
+            LocalPreprocessError,
+            "FRAME_OUTPUT_MISSING_AT_REQUESTED_AND_FALLBACK_TIMESTAMP",
+        ):
+            extract_frame_image_with_timestamp_fallback(
+                "video.mp4",
+                "frames/frame_001",
+                timestamp_ms=15000,
+            )
 
 
 if __name__ == "__main__":
