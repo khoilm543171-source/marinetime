@@ -26,20 +26,24 @@ from marinetime.learning.course import (  # noqa: E402
     build_learning_course,
     write_course_artifacts,
 )
+from marinetime.learning.course_qa import (  # noqa: E402
+    HumanCourseQAError,
+    assert_human_artifact,
+)
 from marinetime.pilot.queue import list_jobs  # noqa: E402
 
 
 DEFAULT_EVIDENCE = ROOT / "storage" / "evidence"
 DEFAULT_DB = ROOT / "storage" / "marinetime.sqlite3"
-DEFAULT_OUTPUT = ROOT / "storage" / "learning" / "course_v1"
-DEFAULT_EXPORT = ROOT / "storage" / "exports" / "marinetime_course_v1.zip"
+DEFAULT_OUTPUT = ROOT / "storage" / "learning" / "course_v2"
+DEFAULT_EXPORT = ROOT / "storage" / "exports" / "marinetime_course_v2.zip"
 
 
 def parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         description=(
-            "Build the complete local learner course from every completed ALU artifact. "
-            "Provider calls: 0."
+            "Build the human-first bilingual Course V2 from every completed ALU artifact. "
+            "Vietnamese explains; English preserves maritime terminology. Provider calls: 0."
         )
     )
     p.add_argument("--evidence-root", type=Path, default=DEFAULT_EVIDENCE)
@@ -126,7 +130,7 @@ def main() -> int:
     sources_without_lesson: list[str] = []
     build_rows: list[dict[str, object]] = []
 
-    print("FULL_LEARNING_COURSE_START")
+    print("FULL_LEARNING_COURSE_V2_START")
     print(f"completed_alu_artifacts={len(candidates)}")
     print(f"missing_alus={len(missing_alus)}")
     print("provider_calls=0")
@@ -153,11 +157,12 @@ def main() -> int:
             lesson_status = "BUILT"
             if card.educational_items:
                 blueprint = build_lesson_blueprint(card)
-                write_lesson_preview(
+                _, lesson_md = write_lesson_preview(
                     blueprint,
                     evidence_anchors=card.evidence_anchors,
                     output_dir=lessons_root / source_id,
                 )
+                assert_human_artifact(lesson_md, kind="LESSON")
                 blueprints.append(blueprint)
             else:
                 lesson_status = "WITHHELD_NO_EDUCATIONAL_ITEMS"
@@ -189,11 +194,13 @@ def main() -> int:
             course,
             output_dir=course_root,
         )
+        assert_human_artifact(course_md, kind="COURSE")
 
         manifest = {
-            "schema_version": "1.0",
+            "schema_version": "2.0",
             "artifact_type": "learning_course_build_manifest",
             "provider_calls": 0,
+            "human_course_qa": "passed",
             "source_cards_built": source_cards_built,
             "source_lessons_built": len(blueprints),
             "educational_alu_items": educational_items,
@@ -219,6 +226,7 @@ def main() -> int:
         json.JSONDecodeError,
         LearningCardError,
         LessonBlueprintError,
+        HumanCourseQAError,
     ) as exc:
         if staging.exists():
             shutil.rmtree(staging)
@@ -229,7 +237,7 @@ def main() -> int:
         )
         return 1
 
-    print("FULL_LEARNING_COURSE_OK")
+    print("FULL_LEARNING_COURSE_V2_OK")
     print(f"source_cards={source_cards_built}")
     print(f"source_lessons={len(blueprints)}")
     print(f"educational_alu_items={educational_items}")
