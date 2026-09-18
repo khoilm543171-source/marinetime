@@ -26,3 +26,13 @@ from .blueprint import (
     render_lesson_preview,
     write_lesson_preview,
 )
+
+from .topic_lesson import (
+    TopicLesson,
+    TopicLessonError,
+    build_topic_lesson,
+    render_qa_report,
+    render_topic_lesson,
+    validate_topic_lesson,
+    write_topic_lesson_artifacts,
+)
