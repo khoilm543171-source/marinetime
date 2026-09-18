@@ -196,6 +196,77 @@ def vietnamese_explanation(
             "toàn cao: dùng nội dung này để hiểu khái niệm và nhận diện rủi ro, không dùng "
             "nó thay cho permit, risk assessment hay quy trình của tàu."
         )
+    if "solas" in lower:
+        return (
+            "**SOLAS** là lớp quy định về an toàn sinh mạng trên biển. Ở ý này, hãy học đúng "
+            "điều nguồn đang gắn với SOLAS; đừng biến tên công ước thành câu trả lời chung chung. "
+            "Khi cần áp dụng chính thức phải quay về điều khoản/tài liệu có thẩm quyền."
+        )
+    if "marpol" in lower or "pollution" in lower:
+        return (
+            "Phần này liên quan đến **MARPOL / pollution prevention**. Hãy tách rõ: nguồn đang "
+            "nói về yêu cầu, hành vi hay tình huống nào. Không suy rộng sang toàn bộ quy trình "
+            "ngăn ngừa ô nhiễm nếu evidence chỉ hỗ trợ một phần."
+        )
+    if "stcw" in lower:
+        return (
+            "**STCW** liên quan đến tiêu chuẩn huấn luyện, chứng chỉ và trực ca. Ý cần nắm ở "
+            "đây là phần cụ thể mà nguồn nhắc tới; khi học để thi/phỏng vấn hãy giữ đúng thuật "
+            "ngữ English, nhưng giải thích bằng lời của mình thay vì đọc thuộc."
+        )
+    if "ism" in lower:
+        return (
+            "Phần này liên quan đến **ISM Code / Safety Management System**. Hãy hiểu mối liên "
+            "hệ giữa ý trong nguồn và cách tàu quản lý an toàn; quy trình thao tác thật vẫn phải "
+            "theo SMS/checklist của chính tàu."
+        )
+    if "fire" in lower:
+        return (
+            "Đây là nội dung về **fire safety**. Khi học, xác định nguồn đang nói về phòng ngừa, "
+            "phát hiện hay ứng phó cháy. Không biến một mẹo hoặc kinh nghiệm cá nhân thành trình "
+            "tự chữa cháy chính thức."
+        )
+    if "lifeboat" in lower or "life boat" in lower:
+        return (
+            "Phần này nói về **lifeboat / survival craft**. Dùng bài để hiểu khái niệm và mục "
+            "đích của thiết bị hoặc thao tác mà nguồn nêu; drill/thao tác thật phải theo quy trình "
+            "tàu và lệnh của người phụ trách."
+        )
+    if "drill" in lower or "emergency" in lower:
+        return (
+            "Đây là nội dung **emergency/drill**. Hãy nhớ vai trò, mục tiêu hoặc hành động mà "
+            "nguồn nêu, nhưng khi có tình huống thật phải ưu tiên muster list, emergency plan và "
+            "mệnh lệnh trên tàu."
+        )
+    if "permit to work" in lower:
+        return (
+            "**Permit to work** là lớp kiểm soát trước khi thực hiện công việc có rủi ro. Hãy "
+            "học điều kiện hoặc mục đích mà nguồn nêu; mẫu permit và trình tự phê duyệt thực tế "
+            "phụ thuộc SMS của tàu."
+        )
+    if "generator" in lower:
+        return (
+            "Phần này nói về **generator (máy phát điện)**. Khi học, xác định hiện tượng/chức "
+            "năng nào đang được giải thích và liên hệ nó với tải, nguồn điện hoặc tình trạng máy "
+            "chỉ trong phạm vi evidence."
+        )
+    if "compressor" in lower:
+        return (
+            "Phần này nói về **air compressor (máy nén khí)**. Hãy tập trung vào chức năng, "
+            "dòng khí và dấu hiệu vận hành mà nguồn thực sự nêu; không tự thêm áp suất hay giới "
+            "hạn vận hành nếu nguồn chưa cho."
+        )
+    if "boiler" in lower:
+        return (
+            "Phần này nói về **boiler (nồi hơi)**. Hãy hiểu quan hệ giữa nước, hơi, đốt và các "
+            "tín hiệu/điều kiện mà nguồn đề cập. Thông số và trình tự vận hành thật phải theo "
+            "maker manual và SMS."
+        )
+    if "valve" in lower:
+        return (
+            "Phần này nói về **valve (van)**. Ý cần nắm là vai trò hoặc trạng thái của van trong "
+            "đúng hệ thống mà nguồn mô tả; không suy ra line-up hoàn chỉnh nếu evidence không có."
+        )
 
     source_vi = vietnamese_source_excerpt(anchors)
     if source_vi:
