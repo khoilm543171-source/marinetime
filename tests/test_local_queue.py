@@ -242,5 +242,61 @@ class LocalQueueTests(unittest.TestCase):
             self.assertEqual(list_jobs(db)[0].status, PENDING)
 
 
+    def test_duplicate_discovery_backfills_creator_and_batch_metadata(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            raw = root / "raw"
+            raw.mkdir()
+            (raw / "video.mp4").write_bytes(b"same-source")
+            db = root / "queue.sqlite3"
+
+            first = enqueue_raw_folder(
+                input_dir=raw,
+                db_path=db,
+                provenance_class="creator_experience",
+            )
+            second = enqueue_raw_folder(
+                input_dir=raw,
+                db_path=db,
+                provenance_class="creator_experience",
+                context={
+                    "creator_id": "nguyen-chi-hieu",
+                    "import_batches": ["NCH-FULL-001"],
+                },
+            )
+
+            self.assertEqual(first.enqueued, 1)
+            self.assertEqual(second.skipped_existing, 1)
+            self.assertEqual(second.updated_existing_metadata, 1)
+            self.assertEqual(second.metadata_conflicts, 0)
+            job = list_jobs(db)[0]
+            self.assertEqual(job.context["creator_id"], "nguyen-chi-hieu")
+            self.assertEqual(job.context["import_batches"], ["NCH-FULL-001"])
+
+    def test_duplicate_discovery_never_overwrites_conflicting_creator(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            raw = root / "raw"
+            raw.mkdir()
+            (raw / "video.mp4").write_bytes(b"same-source")
+            db = root / "queue.sqlite3"
+
+            enqueue_raw_folder(
+                input_dir=raw,
+                db_path=db,
+                provenance_class="creator_experience",
+                context={"creator_id": "creator-a"},
+            )
+            result = enqueue_raw_folder(
+                input_dir=raw,
+                db_path=db,
+                provenance_class="creator_experience",
+                context={"creator_id": "creator-b"},
+            )
+
+            self.assertEqual(result.metadata_conflicts, 1)
+            self.assertEqual(list_jobs(db)[0].context["creator_id"], "creator-a")
+
+
 if __name__ == "__main__":
     unittest.main()
