@@ -111,5 +111,29 @@ class CreatorCatalogTests(unittest.TestCase):
             self.assertEqual(result.confidence, "unknown")
 
 
+    def test_explicit_batch_creator_overrides_filename_inference(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            registry = self._registry(Path(tmp))
+            result = resolve_creator(
+                registry=registry,
+                explicit_creator_id="nguyen-chi-hieu",
+                filename="ABC - misleading title.mp4",
+            )
+            self.assertEqual(result.creator_id, "nguyen-chi-hieu")
+            self.assertEqual(result.source, "explicit_batch_metadata")
+            self.assertTrue(result.is_deterministic)
+
+    def test_invalid_explicit_creator_does_not_fall_through_to_guessing(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            registry = self._registry(Path(tmp))
+            result = resolve_creator(
+                registry=registry,
+                explicit_creator_id="missing-creator",
+                filename="Nguyễn Chí Hiếu - title.mp4",
+            )
+            self.assertEqual(result.creator_id, "unknown")
+            self.assertEqual(result.source, "invalid_explicit_creator_id")
+
+
 if __name__ == "__main__":
     unittest.main()

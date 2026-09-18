@@ -154,6 +154,7 @@ def _ocr_candidate(
 def resolve_creator(
     *,
     registry: tuple[CreatorEntry, ...],
+    explicit_creator_id: str | None = None,
     filename: str | None = None,
     uploader: str | None = None,
     uploader_id: str | None = None,
@@ -161,6 +162,25 @@ def resolve_creator(
     channel_id: str | None = None,
     ocr_texts: Iterable[str] = (),
 ) -> CreatorResolution:
+    if explicit_creator_id:
+        explicit = [entry for entry in registry if entry.creator_id == explicit_creator_id]
+        if len(explicit) == 1:
+            entry = explicit[0]
+            return CreatorResolution(
+                creator_id=entry.creator_id,
+                display_name=entry.display_name,
+                source="explicit_batch_metadata",
+                confidence="deterministic",
+                matched_value=explicit_creator_id,
+            )
+        return CreatorResolution(
+            creator_id=UNKNOWN_CREATOR_ID,
+            display_name="UNKNOWN",
+            source="invalid_explicit_creator_id",
+            confidence="unknown",
+            matched_value=explicit_creator_id,
+        )
+
     identifier_match = _unique_match(
         [uploader_id or "", channel_id or ""],
         registry,

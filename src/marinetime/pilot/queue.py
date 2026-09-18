@@ -38,6 +38,8 @@ class EnqueueResult:
     discovered: int
     enqueued: int
     skipped_existing: int
+    updated_existing_metadata: int = 0
+    metadata_conflicts: int = 0
 
 
 @dataclass(frozen=True)
@@ -99,6 +101,53 @@ def _iter_videos(input_dir: Path, *, recursive: bool) -> Iterable[Path]:
             yield path
 
 
+def _merge_discovery_context(
+    existing: dict,
+    incoming: dict,
+) -> tuple[dict, bool, bool]:
+    """Backfill non-destructive discovery metadata for an already-known source.
+
+    Existing creator identity is never overwritten. Import batch IDs accumulate
+    so re-importing the same source remains idempotent and auditable.
+    """
+    merged = dict(existing)
+    changed = False
+    conflict = False
+
+    incoming_creator = incoming.get("creator_id")
+    existing_creator = merged.get("creator_id")
+    if isinstance(incoming_creator, str) and incoming_creator.strip():
+        if existing_creator in (None, "", "unknown"):
+            merged["creator_id"] = incoming_creator
+            changed = True
+        elif existing_creator != incoming_creator:
+            conflict = True
+
+    incoming_batches = incoming.get("import_batches")
+    if isinstance(incoming_batches, list):
+        current = merged.get("import_batches")
+        if not isinstance(current, list):
+            current = []
+        normalized = [value for value in current if isinstance(value, str) and value.strip()]
+        for value in incoming_batches:
+            if isinstance(value, str) and value.strip() and value not in normalized:
+                normalized.append(value)
+                changed = True
+        if normalized:
+            merged["import_batches"] = normalized
+
+    for key, value in incoming.items():
+        if key in {"creator_id", "import_batches"}:
+            continue
+        if key not in merged:
+            merged[key] = value
+            changed = True
+        elif merged[key] != value:
+            conflict = True
+
+    return merged, changed, conflict
+
+
 def enqueue_raw_folder(
     *,
     input_dir: str | Path,
@@ -117,7 +166,10 @@ def enqueue_raw_folder(
     discovered = 0
     enqueued = 0
     skipped = 0
-    context_json = json.dumps(context or {}, ensure_ascii=False, sort_keys=True)
+    updated_existing_metadata = 0
+    metadata_conflicts = 0
+    incoming_context = context or {}
+    context_json = json.dumps(incoming_context, ensure_ascii=False, sort_keys=True)
 
     with _connect(db_path) as conn:
         for video in _iter_videos(root, recursive=recursive):
@@ -147,8 +199,41 @@ def enqueue_raw_folder(
                 enqueued += 1
             else:
                 skipped += 1
+                row = conn.execute(
+                    "SELECT job_id, context_json FROM raw_video_jobs WHERE content_hash = ?",
+                    (digest,),
+                ).fetchone()
+                if row is not None:
+                    try:
+                        existing_context = json.loads(row["context_json"])
+                    except json.JSONDecodeError:
+                        existing_context = {}
+                    if not isinstance(existing_context, dict):
+                        existing_context = {}
+                    merged, changed, conflict = _merge_discovery_context(
+                        existing_context,
+                        incoming_context,
+                    )
+                    if conflict:
+                        metadata_conflicts += 1
+                    if changed:
+                        conn.execute(
+                            "UPDATE raw_video_jobs SET context_json = ?, updated_at = ? WHERE job_id = ?",
+                            (
+                                json.dumps(merged, ensure_ascii=False, sort_keys=True),
+                                now,
+                                row["job_id"],
+                            ),
+                        )
+                        updated_existing_metadata += 1
 
-    return EnqueueResult(discovered=discovered, enqueued=enqueued, skipped_existing=skipped)
+    return EnqueueResult(
+        discovered=discovered,
+        enqueued=enqueued,
+        skipped_existing=skipped,
+        updated_existing_metadata=updated_existing_metadata,
+        metadata_conflicts=metadata_conflicts,
+    )
 
 
 def _row_to_job(row: sqlite3.Row) -> QueueJob:

@@ -38,8 +38,10 @@ def main() -> int:
     records = []
     counts: dict[str, int] = {}
     for job in jobs:
+        explicit_creator = job.context.get("creator_id")
         resolution = resolve_creator(
             registry=registry,
+            explicit_creator_id=explicit_creator if isinstance(explicit_creator, str) else None,
             filename=job.video_path.name,
         )
         counts[resolution.creator_id] = counts.get(resolution.creator_id, 0) + 1
@@ -52,6 +54,13 @@ def main() -> int:
                 "resolution_source": resolution.source,
                 "confidence": resolution.confidence,
                 "matched_value": resolution.matched_value,
+                "import_batches": [
+                    value
+                    for value in job.context.get("import_batches", [])
+                    if isinstance(value, str)
+                ]
+                if isinstance(job.context.get("import_batches", []), list)
+                else [],
             }
         )
 
