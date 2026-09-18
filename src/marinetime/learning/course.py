@@ -44,7 +44,7 @@ class LearningCourse:
 _TRACKS = (
     (
         "safety-regulation",
-        "Safety, Regulation & Emergency",
+        "An toàn, Quy định & Ứng phó sự cố / Safety, Regulation & Emergency",
         (
             "solas",
             "marpol",
@@ -63,7 +63,7 @@ _TRACKS = (
     ),
     (
         "navigation",
-        "Navigation & Bridge Operations",
+        "Hàng hải & Buồng lái / Navigation & Bridge Operations",
         (
             "passage planning",
             "navigation",
@@ -84,7 +84,7 @@ _TRACKS = (
     ),
     (
         "engine-machinery",
-        "Engine Room & Machinery",
+        "Buồng máy & Máy móc / Engine Room & Machinery",
         (
             "engine",
             "machinery",
@@ -109,7 +109,7 @@ _TRACKS = (
     ),
     (
         "watchkeeping-operations",
-        "Watchkeeping & Shipboard Operations",
+        "Trực ca & Vận hành trên tàu / Watchkeeping & Shipboard Operations",
         (
             "watchkeeping",
             "watch keeping",
@@ -127,7 +127,7 @@ _TRACKS = (
     ),
     (
         "technical-english",
-        "Technical English & Communication",
+        "Tiếng Anh kỹ thuật & Giao tiếp / Technical English & Communication",
         (
             "english",
             "pronunciation",
@@ -142,7 +142,7 @@ _TRACKS = (
     ),
     (
         "career-practical",
-        "Career, Interview & Onboard Practice",
+        "Phỏng vấn, Cadet & Kinh nghiệm đi tàu / Career, Interview & Onboard Practice",
         (
             "interview",
             "cadet",
@@ -177,7 +177,7 @@ def classify_course_track(blueprint: LessonBlueprint) -> tuple[str, str]:
     for track_id, track_title, keywords in _TRACKS:
         if any(keyword in haystack for keyword in keywords):
             return track_id, track_title
-    return "general-marine", "General Marine Knowledge"
+    return "general-marine", "Kiến thức hàng hải tổng hợp / General Marine Knowledge"
 
 
 def build_learning_course(
@@ -188,8 +188,8 @@ def build_learning_course(
     withheld_alu_items: int,
     sources_without_lesson: Iterable[str] = (),
     missing_alu_sources: Iterable[str] = (),
-    course_id: str = "marinetime-core-v1",
-    title: str = "Marinetime Core Learning Course",
+    course_id: str = "marinetime-core-v2",
+    title: str = "Marinetime — Khóa học hàng hải thực chiến / Practical Maritime Learning",
 ) -> LearningCourse:
     if source_cards_built < 0 or educational_alu_items < 0 or withheld_alu_items < 0:
         raise LearningCourseError("NEGATIVE_COURSE_COUNT")
@@ -213,7 +213,7 @@ def build_learning_course(
                 display_title=blueprint.display_title,
                 track_id=track_id,
                 track_title=track_title,
-                lesson_path=f"lessons/{blueprint.source_id}/lesson_preview.md",
+                lesson_path=f"lessons/{blueprint.source_id}/LESSON.md",
                 learning_objectives=len(blueprint.learning_objectives),
                 retrieval_questions=len(blueprint.quick_check),
                 key_items=len(blueprint.key_items),
@@ -239,7 +239,7 @@ def build_learning_course(
     )
 
     return LearningCourse(
-        schema_version="1.0",
+        schema_version="2.0",
         course_id=course_id,
         title=title,
         source_lessons=tuple(lessons),
@@ -291,95 +291,99 @@ def course_to_json(course: LearningCourse) -> dict[str, Any]:
         "missing_alu_sources": list(course.missing_alu_sources),
         "tracks": list(tracks.values()),
         "scope_note": (
-            "This course is a source-grounded learning layer. Creator experience remains "
-            "creator experience until an authority review upgrades the support. Course "
-            "classification is deterministic and provisional; it is for navigation, not "
-            "evidence authority."
+            "Learner-facing Course V2. Vietnamese is the explanation language; English is "
+            "kept for maritime terminology and interview practice. Evidence/provenance data "
+            "remain available behind each lesson and do not become operational permission."
         ),
     }
 
 
 def render_course_markdown(course: LearningCourse) -> str:
+    """Render a human course home page, not an engineering status report."""
     payload = course_to_json(course)
     lines = [
         f"# {course.title}",
         "",
-        "> Evidence-first learner course generated from validated Marinetime ALUs.",
+        "> Đây là **khóa học để học**, không phải dashboard kỹ thuật. "
+        "Tiếng Việt dùng để giải thích; English được giữ lại để học thuật ngữ, đi tàu và phỏng vấn.",
         "",
-        "## Course status",
+        "## Bắt đầu ở đây",
         "",
-        f"- Source cards: **{course.source_cards_built}**",
-        f"- Learner lessons: **{len(course.source_lessons)}**",
-        f"- Education-approved ALU items represented: **{course.educational_alu_items}**",
-        f"- ALU items withheld by education gates: **{course.withheld_alu_items}**",
-        f"- Sources still missing ALU: **{len(course.missing_alu_sources)}**",
-        f"- Sources with ALU but no teachable lesson: **{len(course.sources_without_lesson)}**",
+        "Mỗi bài học theo một nhịp cố định:",
         "",
-        "## How to use this course",
+        "1. **Hiểu** — đọc giải thích tiếng Việt và nhìn thuật ngữ English đi kèm.",
+        "2. **Nhớ** — đóng bài và trả lời câu hỏi retrieval bằng trí nhớ.",
+        "3. **Nói** — trả lời oral practice thành tiếng như đang nói với sĩ quan/phỏng vấn.",
+        "4. **Kiểm tra nguồn khi cần** — evidence và thông tin authority nằm trong phần thu gọn cuối bài.",
         "",
-        "1. Open one lesson and read the mental model before expanding evidence.",
-        "2. Close the lesson and answer its retrieval questions from memory.",
-        "3. Give the oral answer out loud instead of silently rereading.",
-        "4. Treat safety-critical or numeric creator claims as learning material, not operational permission, until authority review is attached.",
-        "5. Record assessment evidence in Marinetime so mastery can move from Seen → Understood → Recalled → Explained → Applied → Retained.",
+        "Đừng cố đọc hết course một lượt. Học **một bài → tự trả lời → nghỉ → quay lại review**.",
+        "",
+        "## Learning path / Lộ trình",
         "",
     ]
 
     for track in payload["tracks"]:
         lines.extend(
             [
-                f"## {track['title']}",
+                f"### {track['title']}",
                 "",
-                f"Lessons: **{track['lesson_count']}**",
+                f"**{track['lesson_count']} bài**",
                 "",
             ]
         )
         for index, lesson in enumerate(track["lessons"], start=1):
-            flags: list[str] = []
-            if lesson["safety_critical_items"]:
-                flags.append(f"safety-critical={lesson['safety_critical_items']}")
-            if lesson["numeric_items"]:
-                flags.append(f"numeric={lesson['numeric_items']}")
-            if lesson["authority_targets"]:
-                flags.append(f"authority-queue={lesson['authority_targets']}")
-            suffix = f" — {', '.join(flags)}" if flags else ""
+            note = ""
+            if lesson["safety_critical_items"] or lesson["numeric_items"]:
+                note = " · ⚠️ có nội dung cần đối chiếu trước khi áp dụng thực tế"
             lines.append(
-                f"{index}. [{lesson['display_title']}]({lesson['lesson_path']}) "
-                f"— {lesson['retrieval_questions']} retrieval question(s){suffix}"
+                f"{index}. [{lesson['display_title']}]({lesson['lesson_path']})"
+                f" · {lesson['retrieval_questions']} câu tự kiểm tra{note}"
             )
         lines.append("")
 
-    if course.sources_without_lesson:
+    if course.sources_without_lesson or course.missing_alu_sources:
         lines.extend(
             [
-                "## Sources withheld from learner lessons",
+                "## Chưa đưa vào khóa học",
                 "",
-                "These completed ALU sources produced no education-approved learner lesson:",
+                "Marinetime không tự bịa bài học để lấp chỗ trống:",
                 "",
             ]
         )
         for source_id in course.sources_without_lesson:
-            lines.append(f"- {source_id}")
-        lines.append("")
-
-    if course.missing_alu_sources:
-        lines.extend(["## Deferred sources", ""])
+            lines.append(f"- {source_id} — chưa có learning item đủ điều kiện.")
         for source_id in course.missing_alu_sources:
-            lines.append(f"- {source_id} — ALU unavailable; not silently substituted.")
+            lines.append(f"- {source_id} — chưa có ALU, nên chưa tạo lesson.")
         lines.append("")
 
     lines.extend(
         [
-            "## Trust boundary",
+            "## Cách biết mình đã học thật",
             "",
-            "- Every learner lesson is derived from an ALU that passed the existing education gate.",
-            "- Evidence anchors remain available inside each lesson.",
-            "- Track labels are navigation aids only and do not change provenance or verification status.",
-            "- No generated lesson counts as mastery; only learner evidence changes ownership state.",
+            "Một bài không được tính là 'đã biết' chỉ vì bạn đã đọc xong.",
+            "",
+            "**Seen → Understood → Recalled → Explained → Applied → Retained**",
+            "",
+            "Marinetime chỉ nâng mức sở hữu kiến thức khi có bằng chứng học tập: "
+            "tự nhớ lại, giải thích thành tiếng, xử lý tình huống và nhớ lại sau một khoảng thời gian.",
+            "",
+            "<details>",
+            "<summary>Thông tin hệ thống / Data & provenance — không cần đọc để học course</summary>",
+            "",
+            f"- Source cards: {course.source_cards_built}",
+            f"- Learner lessons: {len(course.source_lessons)}",
+            f"- Education-approved ALU items: {course.educational_alu_items}",
+            f"- ALU items withheld by gates: {course.withheld_alu_items}",
+            f"- Missing-ALU sources: {len(course.missing_alu_sources)}",
+            f"- Sources without learner lesson: {len(course.sources_without_lesson)}",
+            "",
+            "Track labels chỉ để điều hướng. Chúng không thay đổi provenance, authority hay safety status.",
+            "",
+            "</details>",
             "",
         ]
     )
-    return "\n".join(lines)
+    return "\\n".join(lines)
 
 
 def write_course_artifacts(
