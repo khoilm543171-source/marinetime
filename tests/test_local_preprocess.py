@@ -15,6 +15,7 @@ from marinetime.pilot.local_preprocess import (
     _coerce_paddle_payload,
     _seconds_to_ms,
     build_local_evidence_pack,
+    extract_frame_image,
     select_keyframe_timestamps,
     transcribe_video_audio,
 )
@@ -127,6 +128,47 @@ class LocalPreprocessTests(unittest.TestCase):
         )
         self.assertEqual(result, [])
         mocked_extract.assert_not_called()
+
+
+    @patch("marinetime.pilot.local_preprocess.extract_frame_png")
+    @patch("marinetime.pilot.local_preprocess.extract_frame_jpeg")
+    def test_frame_extraction_falls_back_to_png_for_mjpeg_encoder_error(
+        self,
+        mocked_jpeg,
+        mocked_png,
+    ) -> None:
+        mocked_jpeg.side_effect = LocalPreprocessError(
+            "TOOL_FAILED:ffmpeg:[vost#0:0/mjpeg] Invalid argument | Nothing was written"
+        )
+        mocked_png.return_value = Path("frame_001.png")
+
+        result = extract_frame_image(
+            "video.mp4",
+            "frames/frame_001",
+            timestamp_ms=1000,
+        )
+
+        self.assertEqual(result, Path("frame_001.png"))
+        mocked_png.assert_called_once()
+
+    @patch("marinetime.pilot.local_preprocess.extract_frame_png")
+    @patch("marinetime.pilot.local_preprocess.extract_frame_jpeg")
+    def test_frame_extraction_does_not_hide_non_mjpeg_failure(
+        self,
+        mocked_jpeg,
+        mocked_png,
+    ) -> None:
+        mocked_jpeg.side_effect = LocalPreprocessError(
+            "TOOL_FAILED:ffmpeg:Invalid data found when processing input"
+        )
+
+        with self.assertRaisesRegex(LocalPreprocessError, "Invalid data"):
+            extract_frame_image(
+                "video.mp4",
+                "frames/frame_001",
+                timestamp_ms=1000,
+            )
+        mocked_png.assert_not_called()
 
 
 if __name__ == "__main__":
