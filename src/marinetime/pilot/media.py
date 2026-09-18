@@ -36,8 +36,12 @@ def _run(command: list[str], *, timeout: int = 60) -> subprocess.CompletedProces
     except subprocess.TimeoutExpired as exc:
         raise MediaToolError(f"TOOL_TIMEOUT:{command[0]}") from exc
     if result.returncode != 0:
-        stderr = (result.stderr or "").strip().splitlines()
-        detail = stderr[-1][:300] if stderr else "unknown error"
+        stderr = [line.strip() for line in (result.stderr or "").splitlines() if line.strip()]
+        if stderr:
+            detail_lines = stderr[-4:]
+            detail = " | ".join(detail_lines)[:600]
+        else:
+            detail = "unknown error"
         raise MediaToolError(f"TOOL_FAILED:{command[0]}:{detail}")
     return result
 
