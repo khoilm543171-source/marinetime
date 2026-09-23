@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import shutil
 import sqlite3
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -63,8 +64,18 @@ def _connect(db_path: str | Path) -> sqlite3.Connection:
     return conn
 
 
+@contextmanager
+def _connection(db_path: str | Path) -> Iterable[sqlite3.Connection]:
+    conn = _connect(db_path)
+    try:
+        with conn:
+            yield conn
+    finally:
+        conn.close()
+
+
 def init_queue(db_path: str | Path) -> None:
-    with _connect(db_path) as conn:
+    with _connection(db_path) as conn:
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS raw_video_jobs (
@@ -171,7 +182,7 @@ def enqueue_raw_folder(
     incoming_context = context or {}
     context_json = json.dumps(incoming_context, ensure_ascii=False, sort_keys=True)
 
-    with _connect(db_path) as conn:
+    with _connection(db_path) as conn:
         for video in _iter_videos(root, recursive=recursive):
             discovered += 1
             digest = sha256_file(video)
@@ -263,7 +274,7 @@ def _row_to_job(row: sqlite3.Row) -> QueueJob:
 
 def list_jobs(db_path: str | Path) -> list[QueueJob]:
     init_queue(db_path)
-    with _connect(db_path) as conn:
+    with _connection(db_path) as conn:
         rows = conn.execute("SELECT * FROM raw_video_jobs ORDER BY job_id").fetchall()
     return [_row_to_job(row) for row in rows]
 
@@ -271,7 +282,7 @@ def list_jobs(db_path: str | Path) -> list[QueueJob]:
 def recover_interrupted_jobs(db_path: str | Path) -> int:
     init_queue(db_path)
     now = _utc_now()
-    with _connect(db_path) as conn:
+    with _connection(db_path) as conn:
         cursor = conn.execute(
             """
             UPDATE raw_video_jobs
@@ -286,7 +297,7 @@ def recover_interrupted_jobs(db_path: str | Path) -> int:
 def requeue_failed_jobs(db_path: str | Path) -> int:
     init_queue(db_path)
     now = _utc_now()
-    with _connect(db_path) as conn:
+    with _connection(db_path) as conn:
         cursor = conn.execute(
             """
             UPDATE raw_video_jobs
@@ -339,7 +350,7 @@ def _finish_job(
     last_error: str | None,
 ) -> None:
     now = _utc_now()
-    with _connect(db_path) as conn:
+    with _connection(db_path) as conn:
         conn.execute(
             """
             UPDATE raw_video_jobs

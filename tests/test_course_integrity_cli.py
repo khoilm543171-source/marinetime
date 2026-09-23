@@ -56,7 +56,10 @@ class CourseIntegrityCLITests(unittest.TestCase):
             self.assertNotIn("REJECTED_CLAIM_MUST_NOT_BE_TAUGHT", lesson)
             with zipfile.ZipFile(export) as archive:
                 self.assertIn("manifest.json", archive.namelist())
-                self.assertEqual(archive.read("lessons/VID-001/LESSON.md").decode("utf-8"), lesson)
+                self.assertEqual(
+                    archive.read("lessons/VID-001/LESSON.md"),
+                    (out / "lessons" / "VID-001" / "LESSON.md").read_bytes(),
+                )
 
 
 if __name__ == "__main__":

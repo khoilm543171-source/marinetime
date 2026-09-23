@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from contextlib import closing
 import subprocess
 import sys
 import tempfile
@@ -21,7 +22,7 @@ class QueueStatusLightweightTests(unittest.TestCase):
             evidence_root = root / "evidence"
             source_id = "RAW-TEST"
 
-            with sqlite3.connect(db) as conn:
+            with closing(sqlite3.connect(db)) as conn, conn:
                 conn.execute(
                     """
                     CREATE TABLE raw_video_jobs (
