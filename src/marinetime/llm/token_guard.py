@@ -24,10 +24,13 @@ class TokenLimits:
     max_input_tokens_per_call: int = 20_000
     max_output_tokens_per_call: int = 2_500
     max_tokens_per_video: int = 50_000
+    max_llm_calls_per_video: int = 3
     closeout_daily_tokens: int = MARINETIME_CLOSEOUT_DAILY_TOKENS
     max_daily_tokens: int = MARINETIME_HARD_DAILY_TOKENS
 
     def __post_init__(self) -> None:
+        if type(self.max_llm_calls_per_video) is not int or self.max_llm_calls_per_video <= 0:
+            raise ValueError("MAX_LLM_CALLS_PER_VIDEO_NONPOSITIVE")
         if self.closeout_daily_tokens < 0:
             raise ValueError("CLOSEOUT_DAILY_TOKENS_NEGATIVE")
         if self.max_daily_tokens <= 0:
@@ -97,6 +100,7 @@ def assert_token_budget(
     requested_output_tokens: int,
     current_video_tokens: int,
     current_daily_tokens: int,
+    current_video_calls: int = 0,
     limits: TokenLimits = TokenLimits(),
 ) -> None:
     if min(
@@ -104,8 +108,12 @@ def assert_token_budget(
         requested_output_tokens,
         current_video_tokens,
         current_daily_tokens,
+        current_video_calls,
     ) < 0:
         raise ValueError("TOKEN_COUNTER_NEGATIVE")
+
+    if current_video_calls >= limits.max_llm_calls_per_video:
+        raise TokenBudgetBlocked("MAX_LLM_CALLS_PER_VIDEO")
 
     if estimated_input_tokens > limits.max_input_tokens_per_call:
         raise TokenBudgetBlocked("MAX_INPUT_TOKENS_PER_CALL")

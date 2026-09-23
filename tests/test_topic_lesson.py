@@ -145,7 +145,7 @@ def authority_review() -> dict:
         "schema_version": "1.0",
         "artifact_type": "authority_review",
         "topic_id": "passage-planning",
-        "verification_method": "curated_official_source_rules_v1",
+        "verification_method": "curated_official_source_rules_v2",
         "findings": findings,
         "counts": {
             "direct_support": 1,
@@ -157,6 +157,19 @@ def authority_review() -> dict:
 
 
 class TopicLessonTests(unittest.TestCase):
+    def test_rejects_stale_authority_review_and_forged_direct_support(self) -> None:
+        old = authority_review()
+        old["verification_method"] = "curated_official_source_rules_v1"
+        with self.assertRaisesRegex(TopicLessonError, "AUTHORITY_REVIEW_REBUILD_REQUIRED"):
+            build_topic_lesson(topic_packet=topic_packet(), authority_review=old)
+
+        forged = authority_review()
+        forged["findings"][0]["statement"] = (
+            "Passage planning does NOT have four stages: appraisal, planning, execution, monitoring."
+        )
+        with self.assertRaisesRegex(TopicLessonError, "DIRECT_SUPPORT_PROPOSITION_MISMATCH"):
+            build_topic_lesson(topic_packet=topic_packet(), authority_review=forged)
+
     def test_builds_authority_aware_topic_lesson(self) -> None:
         lesson = build_topic_lesson(
             topic_packet=topic_packet(),

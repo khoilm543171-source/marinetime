@@ -99,7 +99,7 @@ class CompactSemanticViewTests(unittest.TestCase):
             output_tokens=5,
             stop_reason="end_turn",
         )
-        with patch("marinetime.pipeline.alu_extract.run_task", return_value=model_result) as mocked:
+        with patch("marinetime.llm.router.run_task", return_value=model_result) as mocked:
             result = extract_alus(client=object(), evidence_pack=evidence_pack())
 
         dynamic_input = mocked.call_args.kwargs["dynamic_input"]

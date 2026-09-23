@@ -17,7 +17,8 @@ The 7M threshold is a **runtime kill-switch**. `assert_token_budget` rejects a r
 
 ## Accounting semantics
 
-The ledger uses usage fields returned by the configured Claude-compatible provider. Marinetime currently counts:
+The v2 ledger reserves each attempted request before contacting the provider, then
+settles it with usage returned by the configured Claude-compatible provider. Marinetime counts:
 
 - input tokens;
 - output tokens;
@@ -28,7 +29,31 @@ These are **guard-accounting values**, not a claim about provider billing or quo
 
 ## Preflight limitation
 
-Before a request, Marinetime estimates input tokens from text and reserves the requested maximum output. Actual usage is recorded only after the provider responds. Therefore the hard guard is conservative process control, not a mathematical guarantee about an undocumented provider quota system.
+Before a request, Marinetime persists estimated input tokens plus the requested
+maximum output. The reservation and its attempt count survive timeouts, missing
+or malformed usage responses, and process restarts. Valid actual usage replaces
+the reservation rather than being added a second time. Each request is attributed
+to its start date in UTC. Per-video tokens and the three-call limit span all dates.
+Daily tokens alone reset at the UTC date boundary.
+
+Provider input/output usage must be present and nonnegative integers. The guard
+still relies on a text estimate and an undocumented provider accounting system;
+it is not a mathematical guarantee about provider billing. Dollar limits remain
+optional configuration until a reliable pricing source is connected.
+
+### Ledger migration and recovery
+
+- Existing unversioned usage records remain readable and count as completed attempts.
+- New records use schema version `2.0` with `reserved` and `usage` events joined
+  by `request_id`. A settlement preserves the reservation's source and timestamp.
+- Never truncate or delete the ledger to reset a blocked video or daily limit.
+- Malformed lines block new calls with `USAGE_LEDGER_INVALID_LINE`; preserve a
+  backup and reconcile the damaged entry with provider records before repairing it.
+- A short-lived adjacent `.lock` serializes budget checks and writes across
+  processes. `USAGE_LEDGER_LOCKED` blocks new calls. Remove an abandoned lock only
+  after confirming every writer is stopped; keep the ledger and reservations.
+- Unsettled requests keep their reserved charge. Do not assume that a timeout or
+  unsuccessful response was free, or replay it automatically.
 
 The 1.5M closeout window exists partly to keep substantial safety margin before the 7M Marinetime allocation is exhausted.
 

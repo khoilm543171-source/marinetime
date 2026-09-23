@@ -72,6 +72,15 @@ def _entry(
 ) -> dict:
     return {
         "alu": {
+            "schema_version": "1.0",
+            "source_id": "RAW-PP",
+            "provenance_class": "creator_experience",
+            "verification_status": "unverified",
+            "claim_scope": "minimal",
+            "context_requirement": "minimal",
+            "context": {"creator_id": "nguyen-chi-hieu"},
+            "numeric": None,
+            "relation": None,
             "alu_id": alu_id,
             "statement": statement,
             "statement_type": statement_type,

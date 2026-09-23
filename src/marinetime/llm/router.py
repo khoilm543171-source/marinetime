@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
+from uuid import uuid4
 
 from marinetime.llm.client import ClaudeClient, ClaudeResponse
 from marinetime.llm.prompt_registry import load_prompt
@@ -10,7 +12,7 @@ from marinetime.llm.token_guard import (
     assert_token_budget,
     conservative_text_token_estimate,
 )
-from marinetime.llm.usage import UsageRecord, append_usage, load_usage_totals
+from marinetime.llm.usage import UsageRecord, append_usage, ledger_lock, load_usage_totals
 
 
 @dataclass(frozen=True)
@@ -49,18 +51,36 @@ def run_task(
     spec, system_prompt = load_prompt(task, repo_root=repo_root)
     output_limit = max_output_tokens or spec.default_max_output_tokens
 
-    # Runtime budget state always comes from observed provider usage in the
-    # ledger. Callers cannot supply smaller counters to reset/bypass the guard.
-    totals = load_usage_totals(usage_log_path, video_id=video_id)
-
     estimated_input = conservative_text_token_estimate(system_prompt + "\n" + dynamic_input)
-    assert_token_budget(
-        estimated_input_tokens=estimated_input,
-        requested_output_tokens=output_limit,
-        current_video_tokens=totals.video_tokens,
-        current_daily_tokens=totals.daily_tokens,
-        limits=token_limits,
-    )
+    request_id = uuid4().hex
+    started_at = datetime.now(timezone.utc).isoformat()
+    # Persist the attempted call before crossing the provider boundary. A failed
+    # or interrupted request keeps this reservation until usage is reconciled.
+    with ledger_lock(usage_log_path):
+        totals = load_usage_totals(usage_log_path, video_id=video_id)
+        assert_token_budget(
+            estimated_input_tokens=estimated_input,
+            requested_output_tokens=output_limit,
+            current_video_tokens=totals.video_tokens,
+            current_daily_tokens=totals.daily_tokens,
+            current_video_calls=totals.video_calls,
+            limits=token_limits,
+        )
+        append_usage(
+            UsageRecord(
+                task=task,
+                prompt_version=spec.version,
+                model=getattr(getattr(client, "settings", None), "model", "unknown"),
+                input_tokens=estimated_input,
+                output_tokens=output_limit,
+                video_id=video_id,
+                success=False,
+            ),
+            path=usage_log_path,
+            event="reserved",
+            request_id=request_id,
+            timestamp=started_at,
+        )
 
     response: ClaudeResponse = client.messages(
         system=system_prompt,
@@ -80,7 +100,13 @@ def run_task(
         video_id=video_id,
         success=True,
     )
-    append_usage(usage_record, path=usage_log_path)
+    with ledger_lock(usage_log_path):
+        append_usage(
+            usage_record,
+            path=usage_log_path,
+            request_id=request_id,
+            timestamp=started_at,
+        )
 
     return LLMTaskResult(
         text=response.text,

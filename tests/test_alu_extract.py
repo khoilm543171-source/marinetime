@@ -81,7 +81,7 @@ class ALUExtractionTests(unittest.TestCase):
             output_tokens=5,
             stop_reason="end_turn",
         )
-        with patch("marinetime.pipeline.alu_extract.run_task", return_value=model_result) as mocked:
+        with patch("marinetime.llm.router.run_task", return_value=model_result) as mocked:
             result = extract_alus(client=object(), evidence_pack=base_pack())
 
         self.assertEqual(len(result.alus), 1)
@@ -97,7 +97,7 @@ class ALUExtractionTests(unittest.TestCase):
             output_tokens=6000,
             stop_reason="max_tokens",
         )
-        with patch("marinetime.pipeline.alu_extract.run_task", return_value=model_result):
+        with patch("marinetime.llm.router.run_task", return_value=model_result):
             with self.assertRaisesRegex(ALUExtractionError, "MODEL_OUTPUT_TRUNCATED:max_tokens"):
                 extract_alus(client=object(), evidence_pack=base_pack())
 

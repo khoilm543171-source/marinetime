@@ -102,17 +102,27 @@ class ClaudeClient:
         except ValueError as exc:
             raise ClaudeAPIError("Claude API returned non-JSON content.") from exc
 
+        if not isinstance(data, dict):
+            raise ClaudeAPIError("Claude API returned a non-object response.")
+
+        usage_raw = data.get("usage")
+        if not isinstance(usage_raw, dict):
+            raise ClaudeAPIError("PROVIDER_USAGE_MISSING")
+        for field in ("input_tokens", "output_tokens"):
+            if field not in usage_raw:
+                raise ClaudeAPIError(f"PROVIDER_USAGE_MISSING:{field}")
+        counters: dict[str, int] = {}
+        for field in (
+            "input_tokens", "output_tokens", "cache_creation_input_tokens", "cache_read_input_tokens"
+        ):
+            value = usage_raw.get(field, 0)
+            if type(value) is not int or value < 0:
+                raise ClaudeAPIError(f"PROVIDER_USAGE_INVALID:{field}")
+            counters[field] = value
+
         content = data.get("content") or []
         text_parts = [item.get("text", "") for item in content if item.get("type") == "text"]
-        usage_raw = data.get("usage") or {}
-        usage = ClaudeUsage(
-            input_tokens=int(usage_raw.get("input_tokens", 0) or 0),
-            output_tokens=int(usage_raw.get("output_tokens", 0) or 0),
-            cache_creation_input_tokens=int(
-                usage_raw.get("cache_creation_input_tokens", 0) or 0
-            ),
-            cache_read_input_tokens=int(usage_raw.get("cache_read_input_tokens", 0) or 0),
-        )
+        usage = ClaudeUsage(**counters)
         return ClaudeResponse(
             text="".join(text_parts).strip(),
             model=str(data.get("model") or payload["model"]),

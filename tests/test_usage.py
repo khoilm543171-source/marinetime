@@ -10,7 +10,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from marinetime.llm.usage import UsageRecord, append_usage, load_usage_totals
+from marinetime.llm.usage import UsageLedgerError, UsageRecord, append_usage, load_usage_totals
 
 
 class UsageLedgerTests(unittest.TestCase):
@@ -57,7 +57,7 @@ class UsageLedgerTests(unittest.TestCase):
             self.assertEqual(totals.daily_tokens, 135)
             self.assertEqual(totals.video_tokens, 135)
 
-    def test_negative_provider_counter_cannot_subtract_from_total(self) -> None:
+    def test_negative_provider_counter_blocks_budget_reads(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             ledger = Path(temp_dir) / "token_ledger.jsonl"
             valid = {
@@ -77,16 +77,14 @@ class UsageLedgerTests(unittest.TestCase):
                 encoding="utf-8",
             )
 
-            totals = load_usage_totals(ledger, video_id="video-1")
-            self.assertEqual(totals.daily_tokens, 120)
-            self.assertEqual(totals.video_tokens, 120)
+            with self.assertRaisesRegex(UsageLedgerError, "USAGE_LEDGER_INVALID_LINE:2"):
+                load_usage_totals(ledger, video_id="video-1")
 
-    def test_ignores_other_days_and_malformed_lines(self) -> None:
+    def test_video_budget_and_attempts_survive_a_new_utc_day(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             ledger = Path(temp_dir) / "token_ledger.jsonl"
             ledger.write_text(
-                "not-json\n"
-                + json.dumps(
+                json.dumps(
                     {
                         "timestamp": "2000-01-01T00:00:00+00:00",
                         "input_tokens": 999,
@@ -104,7 +102,8 @@ class UsageLedgerTests(unittest.TestCase):
                 day=datetime.now(timezone.utc).date(),
             )
             self.assertEqual(totals.daily_tokens, 0)
-            self.assertEqual(totals.video_tokens, 0)
+            self.assertEqual(totals.video_tokens, 1000)
+            self.assertEqual(totals.video_calls, 1)
 
 
 if __name__ == "__main__":

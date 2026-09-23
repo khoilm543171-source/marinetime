@@ -5,6 +5,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from marinetime.authority.verify import VERIFICATION_METHOD, is_exact_four_stage_claim
+
 
 class TopicLessonError(ValueError):
     """Raised when a topic lesson cannot be built without weakening provenance."""
@@ -97,6 +99,8 @@ def _require_artifacts(
         raise TopicLessonError("TOPIC_AUTHORITY_ID_MISMATCH")
     if topic_id != "passage-planning":
         raise TopicLessonError(f"UNSUPPORTED_TOPIC_LESSON:{topic_id}")
+    if authority_review.get("verification_method") != VERIFICATION_METHOD:
+        raise TopicLessonError("AUTHORITY_REVIEW_REBUILD_REQUIRED")
 
 
 def build_topic_lesson(
@@ -123,6 +127,8 @@ def build_topic_lesson(
         claim = claim_index.get(key)
         statement = _norm(finding.get("statement"))
         status = _norm(finding.get("support_status"))
+        if status == "direct_support" and not is_exact_four_stage_claim(statement):
+            raise TopicLessonError("DIRECT_SUPPORT_PROPOSITION_MISMATCH")
         base = {
             "source_id": key[0],
             "alu_id": key[1],

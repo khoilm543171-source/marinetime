@@ -1,9 +1,13 @@
 from __future__ import annotations
 
 import json
+import os
+from contextlib import contextmanager
 from dataclasses import asdict, dataclass
 from datetime import date, datetime, timezone
 from pathlib import Path
+
+from .token_guard import TokenBudgetBlocked
 
 
 @dataclass(frozen=True)
@@ -39,29 +43,106 @@ class UsageRecord:
 class UsageTotals:
     daily_tokens: int = 0
     video_tokens: int = 0
+    video_calls: int = 0
+
+
+class UsageLedgerError(TokenBudgetBlocked):
+    """An unreadable or busy ledger must never reset the provider budget."""
+
+
+@contextmanager
+def ledger_lock(path: str | Path):
+    """Serialize read/check/reserve across local processes, including Windows.
+
+    Only ledger I/O holds this lock, never the network request. A crash can leave
+    the lock file behind: fail closed until an operator confirms no writer is
+    active and removes that lock. Do not guess based on age.
+    """
+    target = Path(path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    lock_path = target.with_name(target.name + ".lock")
+    try:
+        descriptor = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+    except FileExistsError as exc:
+        raise UsageLedgerError("USAGE_LEDGER_LOCKED") from exc
+    try:
+        os.close(descriptor)
+        yield
+    finally:
+        lock_path.unlink()
 
 
 def append_usage(
     record: UsageRecord,
     path: str | Path = "storage/logs/token_ledger.jsonl",
+    *,
+    event: str = "usage",
+    request_id: str | None = None,
+    timestamp: str | None = None,
 ) -> None:
+    """Append a durable reservation or settlement; caller holds ledger_lock."""
     target = Path(path)
     target.parent.mkdir(parents=True, exist_ok=True)
     payload = asdict(record)
-    payload["guard_tokens"] = record.guard_tokens
-    payload["timestamp"] = datetime.now(timezone.utc).isoformat()
+    payload.update(
+        schema_version="2.0",
+        event=event,
+        request_id=request_id,
+        guard_tokens=record.guard_tokens,
+        timestamp=timestamp or datetime.now(timezone.utc).isoformat(),
+    )
     with target.open("a", encoding="utf-8") as handle:
         handle.write(json.dumps(payload, ensure_ascii=False) + "\n")
+        handle.flush()
+        os.fsync(handle.fileno())
 
 
-def _nonnegative_int(payload: dict, field: str) -> int | None:
-    try:
-        value = int(payload.get(field, 0) or 0)
-    except (TypeError, ValueError):
-        return None
-    if value < 0:
-        return None
-    return value
+def _read_records(target: Path) -> list[dict]:
+    legacy: list[dict] = []
+    requests: dict[str, dict] = {}
+    for number, raw_line in enumerate(target.read_text(encoding="utf-8").splitlines(), 1):
+        if not raw_line.strip():
+            continue
+        try:
+            payload = json.loads(raw_line)
+            if not isinstance(payload, dict):
+                raise ValueError("object required")
+            timestamp = datetime.fromisoformat(payload["timestamp"].replace("Z", "+00:00"))
+            if timestamp.tzinfo is None:
+                raise ValueError("UTC offset required")
+            tokens = []
+            for field in (
+                "input_tokens", "output_tokens", "cache_creation_input_tokens", "cache_read_input_tokens"
+            ):
+                value = payload.get(field, 0) if field.startswith("cache_") else payload[field]
+                if type(value) is not int or value < 0:
+                    raise ValueError("invalid counter")
+                tokens.append(value)
+            payload["_tokens"] = sum(tokens)
+            payload["_day"] = timestamp.astimezone(timezone.utc).date()
+
+            event = payload.get("event", "usage")
+            request_id = payload.get("request_id")
+            if event == "usage" and request_id is None:
+                # Existing pre-v2 records are standalone completed attempts.
+                legacy.append(payload)
+            elif event == "reserved":
+                if not isinstance(request_id, str) or not request_id or request_id in requests:
+                    raise ValueError("invalid reservation")
+                requests[request_id] = payload
+            elif event == "usage":
+                previous = requests.get(request_id)
+                if previous is None or previous.get("event") != "reserved":
+                    raise ValueError("unmatched settlement")
+                for field in ("video_id", "task", "prompt_version", "timestamp"):
+                    if previous.get(field) != payload.get(field):
+                        raise ValueError("settlement identity mismatch")
+                requests[request_id] = payload
+            else:
+                raise ValueError("unknown event")
+        except (ValueError, KeyError, TypeError, AttributeError) as exc:
+            raise UsageLedgerError(f"USAGE_LEDGER_INVALID_LINE:{number}") from exc
+    return legacy + list(requests.values())
 
 
 def load_usage_totals(
@@ -70,47 +151,24 @@ def load_usage_totals(
     video_id: str | None = None,
     day: date | None = None,
 ) -> UsageTotals:
-    """Read provider usage recorded for the selected UTC day.
+    """Daily tokens use request-start UTC day; video totals span all days.
 
-    Malformed ledger lines are ignored rather than allowed to subtract from or
-    otherwise weaken the guard. `guard_tokens` is stored for observability but
-    is deliberately recomputed from the four provider usage fields when read,
-    so a stale/tampered derived total cannot override the source counters.
+    Completed requests replace their reservation, so they count once. A timeout,
+    invalid usage response or process crash leaves its conservative reservation
+    charged. Corrupt records block further calls rather than disappearing.
     """
     target = Path(path)
     if not target.exists():
         return UsageTotals()
-
+    try:
+        records = _read_records(target)
+    except (OSError, UnicodeError) as exc:
+        raise UsageLedgerError("USAGE_LEDGER_UNREADABLE") from exc
     selected_day = day or datetime.now(timezone.utc).date()
-    daily_tokens = 0
-    video_tokens = 0
-
-    token_fields = (
-        "input_tokens",
-        "output_tokens",
-        "cache_creation_input_tokens",
-        "cache_read_input_tokens",
+    daily_tokens = sum(item["_tokens"] for item in records if item["_day"] == selected_day)
+    video_records = [item for item in records if video_id is not None and item.get("video_id") == video_id]
+    return UsageTotals(
+        daily_tokens=daily_tokens,
+        video_tokens=sum(item["_tokens"] for item in video_records),
+        video_calls=len(video_records),
     )
-
-    for raw_line in target.read_text(encoding="utf-8").splitlines():
-        if not raw_line.strip():
-            continue
-        try:
-            payload = json.loads(raw_line)
-            timestamp = datetime.fromisoformat(str(payload["timestamp"]).replace("Z", "+00:00"))
-        except (json.JSONDecodeError, KeyError, TypeError, ValueError):
-            continue
-
-        if timestamp.astimezone(timezone.utc).date() != selected_day:
-            continue
-
-        counters = [_nonnegative_int(payload, field) for field in token_fields]
-        if any(value is None for value in counters):
-            continue
-        guard_tokens = sum(value for value in counters if value is not None)
-
-        daily_tokens += guard_tokens
-        if video_id is not None and payload.get("video_id") == video_id:
-            video_tokens += guard_tokens
-
-    return UsageTotals(daily_tokens=daily_tokens, video_tokens=video_tokens)
