@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>Marinetime Learning</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar" aria-label="Danh sách bài học">
+      <div class="brand">
+        <div class="brand-mark">M</div>
+        <div>
+          <strong>Marinetime</strong>
+          <span>Learning Console</span>
+        </div>
+      </div>
+
+      <label class="search-wrap">
+        <span class="sr-only">Tìm bài học</span>
+        <input id="searchInput" type="search" placeholder="Tìm session, chủ đề…" autocomplete="off">
+      </label>
+
+      <div class="progress-card">
+        <div class="progress-row">
+          <span>Tiến độ</span>
+          <strong id="progressLabel">0 / 0</strong>
+        </div>
+        <div class="progress-track" aria-hidden="true">
+          <div class="progress-bar" id="progressBar"></div>
+        </div>
+      </div>
+
+      <nav id="trackList" class="track-list"></nav>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <button id="menuButton" class="icon-button mobile-only" type="button" aria-label="Mở danh sách bài">☰</button>
+        <div class="topbar-copy">
+          <span id="crumbTrack">Marinetime</span>
+          <strong id="crumbLesson">Chọn một session để bắt đầu</strong>
+        </div>
+        <div class="topbar-actions">
+          <button id="prevButton" class="button ghost" type="button">← Trước</button>
+          <button id="nextButton" class="button ghost" type="button">Sau →</button>
+        </div>
+      </header>
+
+      <section id="emptyState" class="empty-state">
+        <div class="empty-card">
+          <span class="eyebrow">LEARNING SURFACE</span>
+          <h1>ALU là nền dữ liệu. Đây mới là chỗ để học.</h1>
+          <p>Chọn một session bên trái. Nội dung chính được trình bày trước; evidence và trust metadata được giấu xuống dưới để chỉ mở khi cần kiểm tra.</p>
+        </div>
+      </section>
+
+      <article id="lessonView" class="lesson hidden" aria-live="polite"></article>
+    </main>
+  </div>
+
+  <div id="overlay" class="overlay hidden"></div>
+  <script src="./app.js" defer></script>
+</body>
+</html>
