@@ -200,10 +200,17 @@ def enqueue_raw_folder(
             else:
                 skipped += 1
                 row = conn.execute(
-                    "SELECT job_id, context_json FROM raw_video_jobs WHERE content_hash = ?",
+                    "SELECT job_id, context_json, video_path FROM raw_video_jobs WHERE content_hash = ?",
                     (digest,),
                 ).fetchone()
                 if row is not None:
+                    # Identity is content-based; a moved file must remain runnable.
+                    # Keep an existing live location when discovering a duplicate copy.
+                    if not Path(row["video_path"]).is_file():
+                        conn.execute(
+                            "UPDATE raw_video_jobs SET video_path = ?, updated_at = ? WHERE job_id = ?",
+                            (str(video.resolve()), now, row["job_id"]),
+                        )
                     try:
                         existing_context = json.loads(row["context_json"])
                     except json.JSONDecodeError:

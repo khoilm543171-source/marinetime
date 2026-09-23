@@ -70,6 +70,23 @@ SUPPORT_NOT_APPLICABLE = "not_applicable"
 SUPPORT_UNRESOLVED = "unresolved"
 
 
+VERIFICATION_METHOD = "curated_official_source_rules_v2"
+
+# This is deliberately a whole-proposition allowlist, not an entailment model.
+# Any negation, extra clause, changed stage or unsupported paraphrase falls back
+# to review. Expanding this grammar requires corresponding counterexamples.
+_FOUR_STAGE_CLAIM = re.compile(
+    r"(?:(?:the creator (?:states|reports|explains|says) that) )?"
+    r"(?:passage|voyage) planning (?:consists of|has) (?:four|4) stages: "
+    r"appraisal, planning, execution,? (?:and )?monitoring[.]?",
+    re.IGNORECASE,
+)
+
+
+def is_exact_four_stage_claim(statement: str) -> bool:
+    return _FOUR_STAGE_CLAIM.fullmatch(" ".join(statement.split())) is not None
+
+
 def _contains(statement: str, *needles: str) -> bool:
     lower = statement.lower()
     return all(needle.lower() in lower for needle in needles)
@@ -100,21 +117,20 @@ def classify_passage_planning_claim(
 ) -> AuthorityFinding:
     """Map a source claim to researched official support without mutating the ALU.
 
-    This verifier is intentionally conservative. "Direct support" means the core
-    proposition is explicitly represented in the cited official material. Partial
-    support means the official source supports only part of the creator wording or
-    the principle behind it. Unsupported details are never silently promoted.
+    Only a complete, allowlisted proposition can receive direct support.
+    Keyword rules retrieve candidate references and leave the claim unresolved;
+    they do not establish either full or partial semantic support.
     """
     text = " ".join(statement.split()).strip()
     if not text:
         raise AuthorityVerificationError("EMPTY_AUTHORITY_TARGET_STATEMENT")
 
-    if _contains(text, "four stages", "appraisal", "planning", "execution", "monitoring"):
+    if is_exact_four_stage_claim(text) or _contains(text, "four stages", "appraisal", "planning", "execution", "monitoring"):
         return AuthorityFinding(
             alu_id=alu_id,
             source_id=source_id,
             statement=text,
-            support_status=SUPPORT_DIRECT,
+            support_status=SUPPORT_DIRECT if is_exact_four_stage_claim(text) else SUPPORT_UNRESOLVED,
             authority_refs=(
                 _ref(
                     IMO_A893,
@@ -134,11 +150,13 @@ def classify_passage_planning_claim(
                 ),
             ),
             rationale=(
-                "The official sources explicitly identify the same four-stage framework."
+                "The full proposition matches the curated four-stage claim."
+                if is_exact_four_stage_claim(text)
+                else "Candidate references only; the full proposition has not been verified."
             ),
         )
 
-    if "interview" in text.lower() or "checklist" in text.lower():
+    if "interview" in text.lower() and "checklist" in text.lower():
         return AuthorityFinding(
             alu_id=alu_id,
             source_id=source_id,
@@ -158,7 +176,7 @@ def classify_passage_planning_claim(
             alu_id=alu_id,
             source_id=source_id,
             statement=text,
-            support_status=SUPPORT_PARTIAL,
+            support_status=SUPPORT_UNRESOLVED,
             authority_refs=(
                 _ref(
                     IMO_A893,
@@ -171,9 +189,7 @@ def classify_passage_planning_claim(
                 ),
             ),
             rationale=(
-                "The official guidance supports the appraisal principle and several listed "
-                "information types, but does not reproduce every creator-listed item in the "
-                "same stage or wording."
+                "Candidate reference for appraisal; the creator list has not been verified."
             ),
         )
 
@@ -182,7 +198,7 @@ def classify_passage_planning_claim(
             alu_id=alu_id,
             source_id=source_id,
             statement=text,
-            support_status=SUPPORT_PARTIAL,
+            support_status=SUPPORT_UNRESOLVED,
             authority_refs=(
                 _ref(
                     IMO_A893,
@@ -195,9 +211,7 @@ def classify_passage_planning_claim(
                 ),
             ),
             rationale=(
-                "The official resolution strongly supports the core planning framework, but "
-                "does not explicitly verify every creator term such as XTD, abort points, route "
-                "validation wording, or the 'most economical route' phrasing."
+                "Candidate reference for planning; the full creator proposition needs review."
             ),
         )
 
@@ -208,7 +222,7 @@ def classify_passage_planning_claim(
             alu_id=alu_id,
             source_id=source_id,
             statement=text,
-            support_status=SUPPORT_PARTIAL,
+            support_status=SUPPORT_UNRESOLVED,
             authority_refs=(
                 _ref(
                     IMO_A893,
@@ -220,8 +234,7 @@ def classify_passage_planning_claim(
                 ),
             ),
             rationale=(
-                "The execution principle is supported, while 'after proper discussion' is not "
-                "the wording used by the official resolution."
+                "Candidate reference for execution; the full creator proposition needs review."
             ),
         )
 
@@ -230,7 +243,7 @@ def classify_passage_planning_claim(
             alu_id=alu_id,
             source_id=source_id,
             statement=text,
-            support_status=SUPPORT_PARTIAL,
+            support_status=SUPPORT_UNRESOLVED,
             authority_refs=(
                 _ref(
                     IMO_A893,
@@ -242,8 +255,7 @@ def classify_passage_planning_claim(
                 ),
             ),
             rationale=(
-                "The official source supports redundancy in position fixing, but it does not "
-                "state the creator's exact absolute wording 'never GPS alone'."
+                "Candidate reference for position fixing; even partial support needs review."
             ),
         )
 
@@ -254,7 +266,7 @@ def classify_passage_planning_claim(
             alu_id=alu_id,
             source_id=source_id,
             statement=text,
-            support_status=SUPPORT_PARTIAL,
+            support_status=SUPPORT_UNRESOLVED,
             authority_refs=(
                 _ref(
                     IMO_A893,
@@ -274,8 +286,7 @@ def classify_passage_planning_claim(
                 ),
             ),
             rationale=(
-                "Continuous monitoring and redundant position fixing are supported, but the exact "
-                "creator wording about radar-and-visual cross-checking is not fully reproduced."
+                "Candidate reference for monitoring; the full creator proposition needs review."
             ),
         )
 
@@ -375,7 +386,7 @@ def build_authority_review(
         "schema_version": "1.0",
         "artifact_type": "authority_review",
         "topic_id": topic_id,
-        "verification_method": "curated_official_source_rules_v1",
+        "verification_method": VERIFICATION_METHOD,
         "authority_sources": [
             {
                 "source_id": source.source_id,
@@ -442,7 +453,7 @@ def render_authority_review(review: dict[str, Any]) -> str:
         )
         refs = finding.get("authority_refs") or []
         if refs:
-            lines.append("- **Official support:**")
+            lines.append("- **Official references (compare with the claim):**")
             for ref in refs:
                 lines.append(
                     f"  - {ref['authority_source_id']} · {ref['locator']} — "

@@ -22,6 +22,7 @@ from marinetime.pipeline.alu_extract import (
     ALUExtractionResult,
     build_bounded_semantic_evidence_view,
     extract_alus,
+    validate_alu_candidates,
 )
 from marinetime.pipeline.evidence_pack import EvidencePackError, validate_evidence_pack
 
@@ -57,7 +58,7 @@ GLOBAL_BUDGET_PAUSE_REASONS = {
 
 
 def is_global_budget_pause(reason: str) -> bool:
-    return reason in GLOBAL_BUDGET_PAUSE_REASONS
+    return reason in GLOBAL_BUDGET_PAUSE_REASONS or reason.startswith("USAGE_LEDGER_")
 
 
 def _load_json_object(path: Path) -> dict[str, Any]:
@@ -67,18 +68,27 @@ def _load_json_object(path: Path) -> dict[str, Any]:
     return payload
 
 
-def _valid_alu_artifact(path: Path, source_id: str) -> bool:
+def _valid_alu_artifact(path: Path, evidence_pack: dict[str, Any]) -> bool:
     if not path.is_file():
         return False
     try:
         payload = _load_json_object(path)
+        if payload.get("source_id") != evidence_pack["source_id"] or payload.get("schema_version") != "1.0":
+            return False
+        entries = payload.get("alus")
+        if not isinstance(entries, list) or not entries:
+            return False
+        for entry in entries:
+            if not isinstance(entry, dict) or not isinstance(entry.get("decision"), dict):
+                return False
+            if any(type(entry["decision"].get(field)) is not bool for field in (
+                "accepted_for_reference", "accepted_for_education", "accepted_for_operational_use"
+            )):
+                return False
+        validate_alu_candidates([entry.get("alu") for entry in entries], evidence_pack)
     except (OSError, ValueError, json.JSONDecodeError):
         return False
-    return (
-        payload.get("source_id") == source_id
-        and isinstance(payload.get("alus"), list)
-        and bool(payload["alus"])
-    )
+    return True
 
 
 def discover_auto_alu_candidates(evidence_root: str | Path) -> list[AutoALUCandidate]:
@@ -98,7 +108,7 @@ def discover_auto_alu_candidates(evidence_root: str | Path) -> list[AutoALUCandi
             continue
 
         output_path = evidence_path.parent / "alus.json"
-        if _valid_alu_artifact(output_path, summary.source_id):
+        if _valid_alu_artifact(output_path, pack):
             continue
 
         try:
@@ -203,6 +213,7 @@ def _preflight_candidate(
         requested_output_tokens=spec.default_max_output_tokens,
         current_video_tokens=totals.video_tokens,
         current_daily_tokens=totals.daily_tokens,
+        current_video_calls=totals.video_calls,
         limits=limits,
     )
     return (

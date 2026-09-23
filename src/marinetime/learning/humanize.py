@@ -3,6 +3,8 @@ from __future__ import annotations
 import re
 from typing import Any, Iterable
 
+from marinetime.authority.verify import is_exact_four_stage_claim
+
 
 # English stays visible because the learner needs shipboard/interview vocabulary.
 # Vietnamese is the teaching language for explanation and navigation.
@@ -121,166 +123,30 @@ def vietnamese_explanation(
     heading: str,
     anchors: Iterable[str] = (),
 ) -> str:
-    """Return a conservative learner explanation without inventing new facts.
+    """Render a vetted complete proposition or clearly label an untranslated claim.
 
-    This is intentionally not a free-form translation engine. Known marine patterns
-    receive a concise Vietnamese explanation; otherwise we reuse Vietnamese source
-    speech when available and fall back to a clearly bounded explanation.
+    Keyword-triggered prose must never attribute extra details to the source.
+    Original English and evidence anchors remain available in the caller's lesson.
     """
     statement = " ".join(str(item.get("statement") or "").split())
-    lower = statement.lower()
-
-    if "passage planning" in lower and "four stages" in lower:
+    if is_exact_four_stage_claim(statement):
         return (
-            "Passage planning trong nguồn này được chia thành 4 giai đoạn theo thứ tự: "
-            "**Appraisal → Planning → Execution → Monitoring**. Hãy nhớ thứ tự trước, "
-            "sau đó mới học việc phải làm trong từng giai đoạn."
-        )
-    if "appraisal" in lower and any(word in lower for word in ("collect", "information", "before")):
-        return (
-            "Ở **Appraisal**, ý chính là chưa vội vẽ tuyến. Trước hết phải thu thập và "
-            "đánh giá các thông tin liên quan đến chuyến đi mà nguồn đề cập, để có cơ sở "
-            "cho bước Planning."
-        )
-    if "planning" in lower and ("berth-to-berth" in lower or "route" in lower):
-        return (
-            "Ở **Planning**, nguồn tập trung vào việc xây dựng tuyến **berth-to-berth**, "
-            "kiểm tra/validate tuyến và thảo luận trước khi dùng. Đây là phần biến thông "
-            "tin đã thu thập thành một kế hoạch hành trình cụ thể."
-        )
-    if "execution" in lower and "approved plan" in lower:
-        return (
-            "Ở **Execution**, đội buồng lái thực hiện kế hoạch đã được phê duyệt. Ý cần "
-            "nhớ là đây không phải bước tự ý đổi kế hoạch; nguồn đang nói tới việc vận hành "
-            "theo kế hoạch đã được thống nhất."
-        )
-    if "monitoring" in lower and ("position" in lower or "cross-check" in lower):
-        return (
-            "Ở **Monitoring**, phải theo dõi tàu có đang đi đúng kế hoạch hay không và "
-            "đối chiếu vị trí bằng các thông tin/phương pháp mà nguồn nêu. Trọng tâm là "
-            "phát hiện sai lệch sớm, không chỉ nhìn một con số rồi bỏ qua việc kiểm tra chéo."
-        )
-    if "gps" in lower and ("one" in lower or "alone" in lower):
-        return (
-            "Nguồn đang nhấn mạnh **redundancy**: không nên biến một phương pháp xác định "
-            "vị trí thành điểm tựa duy nhất. Đây là cách hiểu từ nội dung creator; khi học "
-            "quy trình chính thức vẫn phải đối chiếu tài liệu có thẩm quyền."
-        )
-    if "purifier" in lower or "separator" in lower:
-        return (
-            "Phần này nói về **purifier/separator**. Hãy tập trung vào chức năng hoặc hiện "
-            "tượng mà nguồn nêu, rồi liên hệ nó với dòng dầu/nước/cặn trong hệ thống. Không "
-            "tự suy ra thông số vận hành nếu nguồn chưa cung cấp."
-        )
-    if "pump" in lower:
-        return (
-            "Phần này nói về **pump (bơm)**. Khi học, tách ba ý: bơm đang chuyển chất lỏng "
-            "nào, qua hệ thống nào, và dấu hiệu/điều kiện nào được nguồn nhắc tới. Chỉ giữ "
-            "những chi tiết thật sự có trong nguồn."
-        )
-    if "watchkeeping" in lower or "watch keeping" in lower or "handover" in lower:
-        return (
-            "Đây là kiến thức về **watchkeeping / handover**. Mục tiêu là hiểu thông tin nào "
-            "phải được nắm và truyền lại giữa các ca theo đúng nội dung nguồn, thay vì học "
-            "thuộc một checklist không có ngữ cảnh."
-        )
-    if "bunker" in lower:
-        return (
-            "Phần này liên quan đến **bunkering**. Hãy học theo trình tự và điều kiện mà "
-            "nguồn thực sự nêu; các bước thao tác thật trên tàu vẫn phải tuân theo SMS, "
-            "checklist và lệnh của tàu."
-        )
-    if "enclosed space" in lower:
-        return (
-            "Phần này liên quan đến **enclosed space (không gian kín)**. Đây là chủ đề an "
-            "toàn cao: dùng nội dung này để hiểu khái niệm và nhận diện rủi ro, không dùng "
-            "nó thay cho permit, risk assessment hay quy trình của tàu."
-        )
-    if "solas" in lower:
-        return (
-            "**SOLAS** là lớp quy định về an toàn sinh mạng trên biển. Ở ý này, hãy học đúng "
-            "điều nguồn đang gắn với SOLAS; đừng biến tên công ước thành câu trả lời chung chung. "
-            "Khi cần áp dụng chính thức phải quay về điều khoản/tài liệu có thẩm quyền."
-        )
-    if "marpol" in lower or "pollution" in lower:
-        return (
-            "Phần này liên quan đến **MARPOL / pollution prevention**. Hãy tách rõ: nguồn đang "
-            "nói về yêu cầu, hành vi hay tình huống nào. Không suy rộng sang toàn bộ quy trình "
-            "ngăn ngừa ô nhiễm nếu evidence chỉ hỗ trợ một phần."
-        )
-    if "stcw" in lower:
-        return (
-            "**STCW** liên quan đến tiêu chuẩn huấn luyện, chứng chỉ và trực ca. Ý cần nắm ở "
-            "đây là phần cụ thể mà nguồn nhắc tới; khi học để thi/phỏng vấn hãy giữ đúng thuật "
-            "ngữ English, nhưng giải thích bằng lời của mình thay vì đọc thuộc."
-        )
-    if "ism" in lower:
-        return (
-            "Phần này liên quan đến **ISM Code / Safety Management System**. Hãy hiểu mối liên "
-            "hệ giữa ý trong nguồn và cách tàu quản lý an toàn; quy trình thao tác thật vẫn phải "
-            "theo SMS/checklist của chính tàu."
-        )
-    if "fire" in lower:
-        return (
-            "Đây là nội dung về **fire safety**. Khi học, xác định nguồn đang nói về phòng ngừa, "
-            "phát hiện hay ứng phó cháy. Không biến một mẹo hoặc kinh nghiệm cá nhân thành trình "
-            "tự chữa cháy chính thức."
-        )
-    if "lifeboat" in lower or "life boat" in lower:
-        return (
-            "Phần này nói về **lifeboat / survival craft**. Dùng bài để hiểu khái niệm và mục "
-            "đích của thiết bị hoặc thao tác mà nguồn nêu; drill/thao tác thật phải theo quy trình "
-            "tàu và lệnh của người phụ trách."
-        )
-    if "drill" in lower or "emergency" in lower:
-        return (
-            "Đây là nội dung **emergency/drill**. Hãy nhớ vai trò, mục tiêu hoặc hành động mà "
-            "nguồn nêu, nhưng khi có tình huống thật phải ưu tiên muster list, emergency plan và "
-            "mệnh lệnh trên tàu."
-        )
-    if "permit to work" in lower:
-        return (
-            "**Permit to work** là lớp kiểm soát trước khi thực hiện công việc có rủi ro. Hãy "
-            "học điều kiện hoặc mục đích mà nguồn nêu; mẫu permit và trình tự phê duyệt thực tế "
-            "phụ thuộc SMS của tàu."
-        )
-    if "generator" in lower:
-        return (
-            "Phần này nói về **generator (máy phát điện)**. Khi học, xác định hiện tượng/chức "
-            "năng nào đang được giải thích và liên hệ nó với tải, nguồn điện hoặc tình trạng máy "
-            "chỉ trong phạm vi evidence."
-        )
-    if "compressor" in lower:
-        return (
-            "Phần này nói về **air compressor (máy nén khí)**. Hãy tập trung vào chức năng, "
-            "dòng khí và dấu hiệu vận hành mà nguồn thực sự nêu; không tự thêm áp suất hay giới "
-            "hạn vận hành nếu nguồn chưa cho."
-        )
-    if "boiler" in lower:
-        return (
-            "Phần này nói về **boiler (nồi hơi)**. Hãy hiểu quan hệ giữa nước, hơi, đốt và các "
-            "tín hiệu/điều kiện mà nguồn đề cập. Thông số và trình tự vận hành thật phải theo "
-            "maker manual và SMS."
-        )
-    if "valve" in lower:
-        return (
-            "Phần này nói về **valve (van)**. Ý cần nắm là vai trò hoặc trạng thái của van trong "
-            "đúng hệ thống mà nguồn mô tả; không suy ra line-up hoàn chỉnh nếu evidence không có."
+            "Nguồn liệt kê **4 giai đoạn** của lập kế hoạch hành trình: "
+            "**Appraisal → Planning → Execution → Monitoring**."
         )
 
     source_vi = vietnamese_source_excerpt(anchors)
     if source_vi:
         return (
-            f"Nguồn nói bằng tiếng Việt: “{source_vi}”\n\n"
-            f"Ý cần nắm ở mục này là **{vietnamese_heading(heading)}**. "
-            "Giữ câu tiếng Anh kỹ thuật bên dưới để học đúng thuật ngữ, nhưng không mở "
-            "rộng thành quy trình hay kết luận mà nguồn chưa nói."
+            f"Trích đoạn tiếng Việt từ bằng chứng: “{source_vi}”\n\n"
+            "Đây là trích đoạn để đối chiếu, chưa phải bản diễn giải đã kiểm chứng "
+            "của toàn bộ mệnh đề tiếng Anh. Kiểm tra đủ điều kiện và ngữ cảnh trong nguồn."
         )
 
     return (
-        f"Ý cần nắm: **{vietnamese_heading(heading)}**. Marinetime giữ nguyên câu tiếng Anh "
-        "kỹ thuật bên dưới để tránh dịch sai thuật ngữ. Phần giải thích này chỉ giúp định "
-        "hướng cách học; không bổ sung chi tiết kỹ thuật ngoài nội dung nguồn."
+        "**Cần duyệt diễn giải tiếng Việt.** Chưa có bản diễn giải được kiểm chứng "
+        "cho mệnh đề này. Hãy đối chiếu câu tiếng Anh và bằng chứng gốc, giữ nguyên "
+        "phủ định, điều kiện, con số và đơn vị; không tự bổ sung chi tiết kỹ thuật."
     )
 
 

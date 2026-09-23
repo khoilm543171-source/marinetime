@@ -48,7 +48,7 @@ class AuthorityVerifierTests(unittest.TestCase):
         self.assertEqual(finding.support_status, SUPPORT_NOT_APPLICABLE)
         self.assertEqual(finding.authority_refs, ())
 
-    def test_appraisal_creator_list_is_partial_not_overpromoted(self) -> None:
+    def test_appraisal_keywords_only_find_candidate_references(self) -> None:
         finding = classify_passage_planning_claim(
             alu_id="ALU-003",
             source_id="RAW-1",
@@ -58,10 +58,11 @@ class AuthorityVerifierTests(unittest.TestCase):
                 "before drawing the route during appraisal."
             ),
         )
-        self.assertEqual(finding.support_status, SUPPORT_PARTIAL)
-        self.assertIn("does not reproduce every", finding.rationale)
+        self.assertEqual(finding.support_status, SUPPORT_UNRESOLVED)
+        self.assertTrue(finding.authority_refs)
+        self.assertIn("has not been verified", finding.rationale)
 
-    def test_gps_absolute_wording_is_only_partial_support(self) -> None:
+    def test_gps_absolute_wording_requires_proposition_review(self) -> None:
         finding = classify_passage_planning_claim(
             alu_id="ALU-006",
             source_id="RAW-1",
@@ -70,8 +71,9 @@ class AuthorityVerifierTests(unittest.TestCase):
                 "specifically stating never to rely on GPS alone during monitoring."
             ),
         )
-        self.assertEqual(finding.support_status, SUPPORT_PARTIAL)
-        self.assertIn("exact absolute wording", finding.rationale)
+        self.assertEqual(finding.support_status, SUPPORT_UNRESOLVED)
+        self.assertTrue(finding.authority_refs)
+        self.assertIn("needs review", finding.rationale)
 
     def test_unknown_claim_remains_unresolved(self) -> None:
         finding = classify_passage_planning_claim(

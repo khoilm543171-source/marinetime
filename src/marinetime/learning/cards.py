@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from marinetime.pipeline.alu_extract import ALUExtractionError, validate_alu_candidates
 from marinetime.pipeline.evidence_pack import validate_evidence_pack
 
 
@@ -98,11 +99,29 @@ def build_source_learning_card(
     title: str | None = None,
 ) -> SourceLearningCard:
     summary = validate_evidence_pack(evidence_pack)
+    if alu_artifact.get("schema_version") != "1.0":
+        raise LearningCardError("UNSUPPORTED_ALU_ARTIFACT_SCHEMA")
     if alu_artifact.get("source_id") != summary.source_id:
         raise LearningCardError("ALU_SOURCE_MISMATCH")
     entries = alu_artifact.get("alus")
     if not isinstance(entries, list) or not entries:
         raise LearningCardError("ALU_ARTIFACT_EMPTY")
+
+    for index, entry in enumerate(entries):
+        if not isinstance(entry, dict) or not isinstance(entry.get("alu"), dict):
+            raise LearningCardError(f"ALU_ENTRY_{index}_INVALID")
+        decision = entry.get("decision")
+        if not isinstance(decision, dict) or any(
+            type(decision.get(field)) is not bool
+            for field in (
+                "accepted_for_reference", "accepted_for_education", "accepted_for_operational_use"
+            )
+        ):
+            raise LearningCardError(f"ALU_ENTRY_{index}_INVALID_DECISION")
+    try:
+        validated = validate_alu_candidates([entry["alu"] for entry in entries], evidence_pack)
+    except ALUExtractionError as exc:
+        raise LearningCardError(f"ALU_ARTIFACT_INVALID:{exc}") from exc
 
     evidence = _evidence_lookup(evidence_pack)
     educational: list[dict[str, Any]] = []
@@ -110,7 +129,7 @@ def build_source_learning_card(
     warnings: list[str] = []
     withheld = 0
 
-    for index, entry in enumerate(entries):
+    for index, (entry, current) in enumerate(zip(entries, validated, strict=True)):
         if not isinstance(entry, dict):
             raise LearningCardError(f"ALU_ENTRY_{index}_NOT_OBJECT")
         alu = entry.get("alu")
@@ -121,8 +140,10 @@ def build_source_learning_card(
         if not isinstance(alu_id, str) or not alu_id.strip():
             raise LearningCardError(f"ALU_ENTRY_{index}_MISSING_ID")
 
-        if not decision.get("accepted_for_education", False):
+        if not decision["accepted_for_education"] or not current.decision.accepted_for_education:
             withheld += 1
+            reasons = current.decision.reasons or ("STORED_EDUCATION_WITHHELD",)
+            warnings.append(f"{alu_id}: withheld: {','.join(reasons)}")
             continue
 
         refs = alu.get("evidence_refs")
@@ -144,7 +165,7 @@ def build_source_learning_card(
                 "evidence_refs": list(refs),
                 "safety_critical": bool((alu.get("safety") or {}).get("safety_critical")),
                 "numeric_claim": bool((alu.get("safety") or {}).get("numeric_claim")),
-                "decision_reasons": list(decision.get("reasons") or []),
+                "decision_reasons": list(current.decision.reasons),
             }
         )
         anchors[alu_id] = tuple(_anchor_for(ref, evidence[ref]) for ref in refs)

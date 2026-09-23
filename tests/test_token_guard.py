@@ -44,6 +44,10 @@ class TokenGuardTests(unittest.TestCase):
             _budget_yaml_int("max_daily_tokens"),
             MARINETIME_HARD_DAILY_TOKENS,
         )
+        self.assertEqual(
+            _budget_yaml_int("max_llm_calls_per_video"),
+            TokenLimits().max_llm_calls_per_video,
+        )
 
     def test_allows_small_call(self) -> None:
         assert_token_budget(

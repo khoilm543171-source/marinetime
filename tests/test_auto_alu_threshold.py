@@ -16,6 +16,7 @@ from marinetime.pipeline.auto_alu import (  # noqa: E402
     run_auto_alu_threshold,
     select_threshold_batch,
 )
+from test_alu_extract import base_alu
 
 
 def _write_evidence(root: Path, source_id: str) -> Path:
@@ -66,13 +67,26 @@ class AutoALUThresholdTests(unittest.TestCase):
             _write_evidence(root, "VID-001")
             _write_evidence(root, "VID-002")
             (root / "VID-001" / "alus.json").write_text(
-                json.dumps({"source_id": "VID-001", "alus": [{"alu": {}}]}),
+                json.dumps({"schema_version": "1.0", "source_id": "VID-001", "alus": [{
+                    "alu": base_alu(),
+                    "decision": {"accepted_for_reference": True, "accepted_for_education": True,
+                                 "accepted_for_operational_use": False},
+                }]}),
                 encoding="utf-8",
             )
 
             candidates = discover_auto_alu_candidates(root)
 
             self.assertEqual([item.source_id for item in candidates], ["VID-002"])
+
+    def test_placeholder_artifact_does_not_mark_a_source_completed(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _write_evidence(root, "VID-001")
+            (root / "VID-001" / "alus.json").write_text(
+                json.dumps({"source_id": "VID-001", "alus": [{"alu": {}}]}), encoding="utf-8"
+            )
+            self.assertEqual([item.source_id for item in discover_auto_alu_candidates(root)], ["VID-001"])
 
     def test_below_threshold_never_requires_provider_settings(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -103,6 +117,9 @@ class AutoALUThresholdTests(unittest.TestCase):
         self.assertFalse(is_global_budget_pause("MAX_TOKENS_PER_VIDEO"))
         self.assertTrue(is_global_budget_pause("MARINETIME_CLOSEOUT_MODE"))
         self.assertTrue(is_global_budget_pause("MAX_DAILY_TOKENS"))
+        self.assertTrue(is_global_budget_pause("USAGE_LEDGER_INVALID_LINE:2"))
+        self.assertTrue(is_global_budget_pause("USAGE_LEDGER_LOCKED"))
+        self.assertFalse(is_global_budget_pause("MAX_LLM_CALLS_PER_VIDEO"))
 
 
 if __name__ == "__main__":

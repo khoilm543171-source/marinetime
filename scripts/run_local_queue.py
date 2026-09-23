@@ -166,7 +166,7 @@ def main() -> int:
         print(f"QUEUE_WORKER_FAILED:{exc}", file=sys.stderr)
         return 1
 
-    print("QUEUE_WORKER_OK")
+    print("QUEUE_WORKER_OK" if result.failed == 0 else "QUEUE_WORKER_PARTIAL_FAILURE")
     print(f"processed={result.processed}")
     print(f"ready={result.ready}")
     print(f"failed={result.failed}")
@@ -175,7 +175,7 @@ def main() -> int:
     if args.local_only:
         print("OPUS_AUTO_DISABLED reason=LOCAL_ONLY")
         print("opus_calls=0")
-        return 0
+        return 1 if result.failed else 0
 
     auto_result = run_auto_alu_threshold(
         evidence_root=args.evidence_root,
@@ -185,10 +185,10 @@ def main() -> int:
     )
     print(f"opus_calls={auto_result.attempted}")
 
+    if result.failed > 0 or auto_result.failed > 0:
+        return 1
     if auto_result.paused_reason is not None:
         return 3
-    if auto_result.failed > 0:
-        return 1
     return 0
 
 

@@ -3,10 +3,11 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from marinetime.llm.client import ClaudeClient
-from marinetime.llm.router import LLMTaskResult, run_task
+if TYPE_CHECKING:
+    from marinetime.llm.client import ClaudeClient
+    from marinetime.llm.router import LLMTaskResult
 from marinetime.validation.safety import ValidationDecision, validate_alu
 
 from .evidence_pack import EvidencePackSummary, validate_evidence_pack
@@ -85,7 +86,7 @@ def _require_enum(
     index: int,
 ) -> str:
     value = item.get(field)
-    if value not in allowed:
+    if not isinstance(value, str) or value not in allowed:
         raise ALUExtractionError(f"ALU_{index}_INVALID_{field.upper()}:{value}")
     return str(value)
 
@@ -264,8 +265,26 @@ def parse_alu_response(
     evidence_pack: dict[str, Any],
 ) -> tuple[ValidatedALU, ...]:
     """Parse and deterministically validate one semantic extraction response."""
+    return validate_alu_candidates(_decode_payload(text), evidence_pack, from_model=True)
+
+
+def validate_alu_candidates(
+    candidates: list[dict[str, Any]],
+    evidence_pack: dict[str, Any],
+    *,
+    from_model: bool = False,
+) -> tuple[ValidatedALU, ...]:
+    """Revalidate stored ALUs without trusting their cached eligibility decisions.
+
+    Stored artifacts may have subsequently reviewed/rejected status. Fresh model
+    output must still be unverified and cannot request operational rendering.
+    This path uses only the standard library so local consumers need no API client.
+    """
     summary: EvidencePackSummary = validate_evidence_pack(evidence_pack)
-    candidates = _decode_payload(text)
+    if not isinstance(candidates, list) or not candidates:
+        raise ALUExtractionError("MODEL_OUTPUT_EMPTY_ALUS")
+    if not all(isinstance(item, dict) for item in candidates):
+        raise ALUExtractionError("MODEL_OUTPUT_ALU_NOT_OBJECT")
     evidence_context = evidence_pack["context"]
     seen_alu_ids: set[str] = set()
     validated: list[ValidatedALU] = []
@@ -289,7 +308,10 @@ def parse_alu_response(
         _require_nonempty_string(alu, "statement", index)
         _require_enum(alu, "statement_type", STATEMENT_TYPES, index)
         _require_enum(alu, "support_level", SUPPORT_LEVELS, index)
-        _require_enum(alu, "rendering_scope", EXTRACTION_RENDERING_SCOPES, index)
+        rendering_scopes = EXTRACTION_RENDERING_SCOPES
+        if not from_model:
+            rendering_scopes = rendering_scopes | {"authoritative_operational"}
+        _require_enum(alu, "rendering_scope", rendering_scopes, index)
         _require_enum(alu, "claim_scope", CLAIM_SCOPES, index)
         _require_enum(alu, "context_requirement", CONTEXT_REQUIREMENTS, index)
         provenance = _require_enum(alu, "provenance_class", PROVENANCE_CLASSES, index)
@@ -299,7 +321,7 @@ def parse_alu_response(
 
         if provenance != summary.provenance_class:
             raise ALUExtractionError(f"ALU_{index}_PROVENANCE_MISMATCH")
-        if verification != "unverified":
+        if from_model and verification != "unverified":
             raise ALUExtractionError(f"ALU_{index}_MODEL_SELF_VERIFICATION_FORBIDDEN")
 
         refs = alu.get("evidence_refs")
@@ -343,6 +365,8 @@ def extract_alus(
     semantic_view: dict[str, Any] | None = None,
 ) -> ALUExtractionResult:
     """Run one semantic pass, with budget accounting bound to source identity."""
+    from marinetime.llm.router import run_task
+
     summary = validate_evidence_pack(evidence_pack)
     if semantic_view is None:
         semantic_view = build_semantic_evidence_view(evidence_pack)

@@ -54,6 +54,15 @@ def alu_artifact() -> dict:
         "alus": [
             {
                 "alu": {
+                    "schema_version": "1.0",
+                    "source_id": "RAW-001",
+                    "provenance_class": "creator_experience",
+                    "verification_status": "unverified",
+                    "claim_scope": "minimal",
+                    "context_requirement": "minimal",
+                    "context": {"creator_id": "nguyen-chi-hieu"},
+                    "numeric": None,
+                    "relation": None,
                     "alu_id": "ALU-001",
                     "statement": "The creator describes one learning point from onboard experience.",
                     "statement_type": "creator_statement",
@@ -71,6 +80,15 @@ def alu_artifact() -> dict:
             },
             {
                 "alu": {
+                    "schema_version": "1.0",
+                    "source_id": "RAW-001",
+                    "provenance_class": "creator_experience",
+                    "verification_status": "unverified",
+                    "claim_scope": "minimal",
+                    "context_requirement": "minimal",
+                    "context": {"creator_id": "nguyen-chi-hieu"},
+                    "numeric": None,
+                    "relation": None,
                     "alu_id": "ALU-002",
                     "statement": "A withheld unsupported claim.",
                     "statement_type": "unknown",
